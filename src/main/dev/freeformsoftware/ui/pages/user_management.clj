@@ -19,18 +19,22 @@
                    username
                    :duration-hours 24)]
     [:div.flex.items-center.gap-2
-     [:a.text-blue-600.hover:underline.break-all
-      {:href reset-url
-       :id (str "reset-link-" user-id)}
-      "Password Reset Link"]
+     [:input
+      {:type "text"
+       :readonly true
+       :value reset-url
+       :id (str "reset-link-" user-id)
+       :class (str (clojure.string/join " " ui.frag/input-classes)
+                   " cursor-pointer text-gray-600")
+       :style "max-width: 50%; background-color: rgba(239, 239, 239, 0.3);"
+       :onclick "this.select()"}]
      [:button
       {:type "button"
        :class ui.frag/button-classes
        :_ (str "on click "
-               "set link to #reset-link-"
-               user-id
-               ".href "
-               "call navigator.clipboard.writeText(link) "
+               "get #reset-link-" user-id " "
+               "call its.select() "
+               "call document.execCommand('copy') "
                "set my.textContent to 'Copied!' "
                "wait 2s "
                "set my.textContent to 'Copy'")}
@@ -84,8 +88,10 @@
                             :label "User ID"
                             :placeholder "Enter user ID"
                             :value (:user-id user)
-                            :class ui.frag/input-classes
+                            :class (str (clojure.string/join " " ui.frag/input-classes)
+                                        (when edit? " cursor-pointer"))
                             :disabled edit?
+                            :onclick (when edit? "this.select()")
                             :required true})
 
        ;; Groups section

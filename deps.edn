@@ -24,6 +24,7 @@
         jarohen/chime                               {:mvn/version "0.3.3"}
         com.fulcrologic/guardrails                  {:mvn/version "1.1.13"}
         ;; allow guardrails in prod because idc. Perf isn't a huge deal
+        metosin/muuntaja                            {:mvn/version "0.6.11"}
 
         buddy/buddy-core                            {:mvn/version "1.12.0-430"}
         buddy/buddy-sign                            {:mvn/version "3.6.1-359"}

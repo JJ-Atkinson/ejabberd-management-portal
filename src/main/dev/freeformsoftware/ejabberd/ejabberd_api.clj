@@ -29,8 +29,6 @@
               :as :json
               :throw-exceptions false}
         response (http/request opts)]
-    (tap> {:req opts
-           :resp response})
     (tel/log! :debug ["API request" {:endpoint endpoint
                                      :payload payload
                                      :status (:status response)}])

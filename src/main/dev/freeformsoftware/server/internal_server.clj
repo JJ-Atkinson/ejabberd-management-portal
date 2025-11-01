@@ -9,6 +9,7 @@
    [dev.freeformsoftware.server.core :as server]
    [taoensso.telemere :as tel]
    [ring.middleware.defaults :as ring-defaults]
+   [muuntaja.middleware :as muuntaja]
    [clojure.string :as str])
   (:import
     [org.eclipse.jetty.server Server]))
@@ -21,6 +22,7 @@
     (-> (fn [req]
           (let [router (server/wrap-tap>-exception (create-router (@internal-routes/!create-routes config)))]
             (router req)))
+        (muuntaja/wrap-format)
         (ring-defaults/wrap-defaults
          (-> ring-defaults/api-defaults
              (assoc-in [:security :anti-forgery] false))))))

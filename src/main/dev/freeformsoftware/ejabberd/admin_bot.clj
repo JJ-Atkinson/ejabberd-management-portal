@@ -214,8 +214,12 @@
   ([^AbstractXMPPConnection conn ^EntityBareJid jid ^String message ^OmemoManager omemo-manager]
    (if omemo-manager
      (try
-       (let [encrypted-message (.encrypt omemo-manager jid message)]
-         (.sendStanza conn encrypted-message)
+       (let [encrypted-message (.encrypt omemo-manager jid message)
+             ;; In SMACK 4.4.x, use buildMessage with StanzaFactory
+             ;; getStanzaFactory().buildMessageStanza() returns a MessageBuilder
+             message-builder (-> conn .getStanzaFactory .buildMessageStanza)
+             stanza (.buildMessage encrypted-message message-builder jid)]
+         (.sendStanza conn stanza)
          (tel/log! :debug ["Sent OMEMO encrypted DM" {:to (str jid)}]))
        (catch Exception e
          (tel/log! :warn ["Failed to send OMEMO encrypted message, falling back to plaintext" {:error (ex-message e)}])
@@ -230,24 +234,17 @@
 (defn- send-muc-message!
   "Sends a message to a MUC room.
    
-   Attempts OMEMO encryption if omemo-manager is provided, falls back to plaintext."
+   Attempts OMEMO encryption if omemo-manager is provided, falls back to plaintext.
+   
+   NOTE: MUC OMEMO encryption is currently disabled due to connection stability issues."
   ([^AbstractXMPPConnection conn ^EntityBareJid jid ^String message]
    (send-muc-message! conn jid message nil))
   ([^AbstractXMPPConnection conn ^EntityBareJid jid ^String message ^OmemoManager omemo-manager]
-   (if omemo-manager
-     (try
-       (let [encrypted-message (.encrypt omemo-manager jid message)]
-         (.sendStanza conn encrypted-message)
-         (tel/log! :debug ["Sent OMEMO encrypted MUC message" {:to (str jid)}]))
-       (catch Exception e
-         (tel/log! :warn ["Failed to send OMEMO encrypted MUC message, falling back to plaintext" {:error (ex-message e)}])
-         (let [muc-manager (get-muc-manager conn)
-               ^MultiUserChat muc (.getMultiUserChat muc-manager jid)]
-           (.sendMessage muc message))))
-     ;; No OMEMO manager, send plaintext
-     (let [muc-manager (get-muc-manager conn)
+   ;; Temporarily disabled - MUC OMEMO encryption causes connection timeouts
+   ;; TODO: Investigate why OMEMO device list queries to MUC rooms timeout
+   #_(let [muc-manager (get-muc-manager conn)
            ^MultiUserChat muc (.getMultiUserChat muc-manager jid)]
-       (.sendMessage muc message)))))
+       (.sendMessage muc message))))
 
 (defn breakup-jid
   "Breaks up a JID entity into its component parts.
@@ -628,15 +625,24 @@
 
               ;; Create OMEMO manager (store already configured globally)
               omemo-manager (create-omemo-manager connection)
-              omemo-listener (setup-omemo-listener omemo-manager conf)
 
-              ;; Setup DM listener and store it
-              dm-listener (setup-message-listener conf)
-              ;; Join all MUC rooms
-              joined-rooms (join-all-rooms conf)
-              final-conf (assoc conf
-                                :connection-listener connection-listener
-                                :omemo-manager omemo-manager
+              ;; CRITICAL FIX: Create conf-with-omemo BEFORE setting up listeners
+              ;; so that all listeners (including OMEMO listener) capture the complete
+              ;; conf with OMEMO support
+              conf-with-omemo (assoc conf
+                                     :connection-listener connection-listener
+                                     :omemo-manager omemo-manager)
+
+              ;; NOW setup OMEMO listener with complete config
+              omemo-listener (setup-omemo-listener omemo-manager conf-with-omemo)
+
+              ;; Setup DM listener and store it (now with OMEMO in conf)
+              dm-listener (setup-message-listener conf-with-omemo)
+
+              ;; Join all MUC rooms (now with OMEMO in conf)
+              joined-rooms (join-all-rooms conf-with-omemo)
+
+              final-conf (assoc conf-with-omemo
                                 :omemo-listener omemo-listener
                                 :dm-message-listener dm-listener
                                 :joined-rooms joined-rooms)]

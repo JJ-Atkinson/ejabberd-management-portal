@@ -1,0 +1,6 @@
+procs:
+  launchpad:
+    cmd: ["bin/launchpad"]
+
+  resources-watch:
+    cmd: ["bin/watch-resources"]

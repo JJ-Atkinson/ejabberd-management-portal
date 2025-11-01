@@ -1,0 +1,69 @@
+# MacOS
+.DS_Store
+
+# Intellij
+*.iml
+.idea
+
+# Calva
+.calva
+.vscode
+
+# Portal X vscode plugin
+.portal
+
+# Direnv
+.direnv/
+.envrc
+
+# nREPL
+.nrepl-port
+
+# Node.js dependencies
+node_modules
+package-lock.json
+
+# Generated public resources
+/resources/public
+
+# Production build resources
+/prod-resources
+
+# shadow-cljs cache, port files
+.shadow-cljs
+
+# tools.deps
+.cpcache
+
+# clerk
+.clerk
+
+# clojure-lsp + clj-kondo
+**/.clj-kondo/.cache
+**/.lsp/.cache
+
+# Build artifacts
+target
+
+# Google Clasp
+.clasprc.json
+
+# Local overrides
+*.local
+*.local.*
+
+# Public/Private keys
+jwk_private.pem
+jwk_public.pem
+jwks.json
+
+/db
+.#*
+.terraform
+/log
+/datomic-pro
+.hai-data
+.hai-downloads
+
+mprocs.log
+/resources/config/secrets.edn

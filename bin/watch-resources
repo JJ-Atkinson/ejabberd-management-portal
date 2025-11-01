@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure npm dependencies are installed
+npm install
+
+# Create public directories
+mkdir -p resources/public/css resources/public/js
+
+# Bundle JavaScript (initial build)
+npm run build:js
+
+# Copy dev-ws.js separately (not bundled)
+cp resources/js/dev-ws.js resources/public/js/
+
+# Start watchers in parallel (CSS in foreground, JS in background)
+npm run watch:js &
+JS_PID=$!
+
+# Trap to cleanup background process
+trap "kill $JS_PID 2>/dev/null || true" EXIT
+
+# Watch Tailwind CSS (this will run in foreground)
+npm run watch:css

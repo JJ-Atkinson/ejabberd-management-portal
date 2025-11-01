@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Ensure npm dependencies are installed
+npm install
+
+# Clean up existing production resources
+rm -rf prod-resources
+
+# Create production directories
+mkdir -p prod-resources/public/css prod-resources/public/js prod-resources/config
+
+# Copy config folder (excluding secrets)
+cp resources/config/config.edn prod-resources/config/
+cp resources/config/default-user-db*.edn prod-resources/config/ 2>/dev/null || true
+
+# Bundle JavaScript with production settings (minified, no sourcemaps)
+NODE_ENV=production npx rollup -c rollup.config.prod.js
+
+# Build Tailwind CSS with production settings (minified, purged)
+NODE_ENV=production npx tailwindcss -i ./resources/css/input.css -o ./prod-resources/public/css/output.css --minify
+
+echo "Production resources built successfully in prod-resources/"
+
+# Also build development resources
+mkdir -p resources/public/css resources/public/js
+
+# Bundle JavaScript
+npm run build:js
+
+# Copy dev-ws.js separately (not bundled)
+cp resources/js/dev-ws.js resources/public/js/
+
+# Build Tailwind CSS
+npm run build:css
+
+echo "Development resources built successfully"
+
+# Build the uberjar
+echo ""
+echo "Building uberjar..."
+clojure -T:build uber

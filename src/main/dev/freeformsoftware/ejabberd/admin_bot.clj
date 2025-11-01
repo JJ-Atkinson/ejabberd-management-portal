@@ -21,7 +21,7 @@
    [integrant.core :as ig]
    [taoensso.telemere :as tel])
   (:import
-   [org.jivesoftware.smack AbstractXMPPConnection ConnectionListener]
+   [org.jivesoftware.smack AbstractXMPPConnection ConnectionListener ReconnectionManager ReconnectionManager$ReconnectionPolicy]
    [org.jivesoftware.smack.packet Stanza Message]
    [org.jivesoftware.smack.tcp XMPPTCPConnection XMPPTCPConnectionConfiguration XMPPTCPConnectionConfiguration$Builder]
    [org.jivesoftware.smack.chat2 ChatManager Chat IncomingChatMessageListener]
@@ -134,6 +134,9 @@
     (catch Exception e
       (tel/log! :warn ["OMEMO service initialization issue" {:error (ex-message e)}]))))
 
+;; Forward declaration for reconnection handler
+(declare join-all-rooms)
+
 (defn- setup-connection-listener
   "Sets up a listener to monitor XMPP connection state changes.
    
@@ -142,14 +145,28 @@
    - Authenticated
    - Closed (normal or error)
    
+   Also enables automatic reconnection with exponential backoff.
+   
+   The conf-atom should be updated with the final conf after initialization,
+   so that reconnection handlers have access to the complete config.
+   
    Returns the listener instance."
-  [^AbstractXMPPConnection connection]
+  [^AbstractXMPPConnection connection !conf]
   (let [listener (reify ConnectionListener
                    (connected [_this _connection]
                      (tel/log! :info ["XMPP connection established"]))
 
-                   (authenticated [_this _connection _resumed]
-                     (tel/log! :info ["XMPP authenticated" {:resumed _resumed}]))
+                   (authenticated [_this _connection resumed]
+                     (tel/log! :info ["XMPP authenticated" {:resumed resumed}])
+                     ;; After successful reconnection, rejoin all rooms
+                     (when resumed
+                       (tel/log! :info ["Reconnection detected - rejoining rooms"])
+                       (try
+                         (when-let [conf @!conf]
+                           (join-all-rooms conf))
+                         (catch Exception e
+                           (tel/log! :error ["Failed to rejoin rooms after reconnection"
+                                             {:error (ex-message e)}])))))
 
                    (connectionClosed [_this]
                      (tel/log! :warn ["XMPP connection closed normally"]))
@@ -159,6 +176,14 @@
                                        {:error (ex-message e)
                                         :type (type e)}])))]
     (.addConnectionListener connection listener)
+
+    ;; Enable automatic reconnection
+    (ReconnectionManager/setEnabledPerDefault true)
+    (let [reconnection-manager (ReconnectionManager/getInstanceFor connection)]
+      (.setReconnectionPolicy reconnection-manager ReconnectionManager$ReconnectionPolicy/RANDOM_INCREASING_DELAY)
+      (.enableAutomaticReconnection reconnection-manager)
+      (tel/log! :info ["Automatic reconnection enabled with random increasing delay"]))
+
     (tel/log! :info ["Connection listener registered"])
     listener))
 
@@ -604,6 +629,9 @@
         ;; Initialize listener tracking atoms
         !muc-room-listeners (atom {})
 
+        ;; Create atom to hold final conf (for reconnection handlers)
+        !final-conf (atom nil)
+
         ;; Setup base config
         conf {:admin-http-portal-url admin-http-portal-url
               :connection connection
@@ -621,7 +649,7 @@
         (tel/log! :info ["Admin bot connected successfully"])
 
         ;; Setup connection listener to monitor disconnections
-        (let [connection-listener (setup-connection-listener connection)
+        (let [connection-listener (setup-connection-listener connection !final-conf)
 
               ;; Create OMEMO manager (store already configured globally)
               omemo-manager (create-omemo-manager connection)
@@ -646,6 +674,8 @@
                                 :omemo-listener omemo-listener
                                 :dm-message-listener dm-listener
                                 :joined-rooms joined-rooms)]
+          ;; Update the atom so reconnection handlers have access to complete conf
+          (reset! !final-conf final-conf)
           (def testing-conf* final-conf)
           final-conf))
       (do

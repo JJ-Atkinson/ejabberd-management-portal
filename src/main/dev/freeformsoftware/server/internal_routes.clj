@@ -1,4 +1,6 @@
-(ns dev.freeformsoftware.server.internal-routes
+(ns dev.freeformsoftware.server.internal-routes 
+  "Internal routes are how the EJ server mods can communicate directly with this admin api.
+   Most routes should not be internal, and should actually appear on the main routes."
   (:require
    [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot]
    [ring.util.response :as response])

@@ -1,0 +1,85 @@
+{:env :dev
+ :app-title "EJ MGMT"
+ :db-folder "/var/lib/ejabberd-management-portal"
+ :admin-api-url "https://xmpp.yourserverhere.org/api"
+ :admin-http-portal-url "https://xmpp.yourserverhere.org/admin"
+ :management-portal-url-base "https://xmpp-management-portal.yourserverhere.org"
+ :xmpp-domain "yourserverhere.org"
+ :jitsi-config {:base-url "https://meet.yourserverhere.org"
+                :app-id   "jitsi"
+                :issuer   "dev.freeformsoftware"
+                :audience "jitsi"
+                :subject  "meet.jitsi"}
+ :muc-service "conference.yourserverhere.org"
+ :default-test-password "TEMPORARY_PASSWORD_CHANGE_ME"
+ :sync-state-timeout-s 600
+ :managed-muc-options {:allow_change_subj                    "false"
+                       :allow_private_messages_from_visitors "false"
+                       :allow_query_users                    "true"
+                       :allow_subscription                   "true"
+                       :allow_user_invites                   "false"
+                       :allow_visitor_nickchange             "false"
+                       :allow_visitor_status                 "false"
+                       :allow_voice_requests                 "true"
+                       :allowpm                              "participants"
+                       :anonymous                            "false"
+                       :captcha_protected                    "false"
+                       :enable_hats                          "false"
+                       :password_protected                   "false"
+                       :persistent                           "true"
+                       :public_list                          "false"
+                       :public                               "true"}
+
+ :system
+ {:dev.freeformsoftware.db.file-interaction/user-db
+  {:db-folder #n/ref :db-folder}
+
+  :dev.freeformsoftware.link-provider/link-provider
+  {:jwt-secret                 #n/ref :jwt-secret
+   :management-portal-url-base #n/ref :management-portal-url-base
+   :jitsi-config               #n/ref :jitsi-config}
+
+  :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
+  {:user-db       #ig/ref :dev.freeformsoftware.db.file-interaction/user-db
+   :admin-api-url #n/ref :admin-api-url
+   :xmpp-domain   #n/ref :xmpp-domain
+   :muc-service   #n/ref :muc-service}
+
+  :dev.freeformsoftware.ejabberd.sync-state/sync-state
+  {:ejabberd-api          #ig/ref :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
+   :user-db               #ig/ref :dev.freeformsoftware.db.file-interaction/user-db
+   :admin-bot             #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot
+   :sync-timeout-s        #n/ref :sync-state-timeout-s
+   :managed-muc-options   #n/ref :managed-muc-options
+   :env                   #n/ref :env
+   :default-test-password #n/ref :default-test-password}
+
+  :dev.freeformsoftware.ejabberd.admin-bot/admin-bot
+  {:user-db               #ig/ref :dev.freeformsoftware.db.file-interaction/user-db
+   :ejabberd-api          #ig/ref :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
+   :link-provider         #ig/ref :dev.freeformsoftware.link-provider/link-provider
+   :xmpp-domain           #n/ref :xmpp-domain
+   :admin-http-portal-url #n/ref :admin-http-portal-url}
+
+  :dev.freeformsoftware.server.core/server
+  {:jetty                      {:port 3000}
+   :env                        #n/ref :env
+   :app-title                  #n/ref :app-title
+   :jwt-secret                 #n/ref :jwt-secret
+   :xmpp-domain                #n/ref :xmpp-domain
+   :management-portal-url-base #n/ref :management-portal-url-base
+   :user-db                    #ig/ref :dev.freeformsoftware.db.file-interaction/user-db
+   :sync-state                 #ig/ref :dev.freeformsoftware.ejabberd.sync-state/sync-state
+   :ejabberd-api               #ig/ref :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
+   :link-provider              #ig/ref :dev.freeformsoftware.link-provider/link-provider
+   :admin-bot                  #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot}
+
+  :dev.freeformsoftware.server.internal-server/server
+  {:jetty     {:port 3004}
+   :env       #n/ref :env
+   :admin-bot #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot}
+
+  #_#_
+  :dev.freeformsoftware.run.debugging-nrepl-server/debugging-nrepl-server
+  {:port 3005}
+  }}

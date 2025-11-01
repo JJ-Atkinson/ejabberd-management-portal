@@ -1,0 +1,57 @@
+{:paths ["src/main"]
+ :deps {;; contains nrepl, don't release with this in here
+        nrepl/nrepl                                 {:mvn/version "1.5.1"}
+        com.taoensso/telemere                       {:mvn/version "1.1.0"}
+        camel-snake-kebab/camel-snake-kebab         {:mvn/version "0.4.3"}
+        org.igniterealtime.smack/smack-tcp          {:mvn/version "4.4.8"}
+        org.igniterealtime.smack/smack-im           {:mvn/version "4.4.8"}
+        org.igniterealtime.smack/smack-extensions   {:mvn/version "4.4.8"}
+        org.igniterealtime.smack/smack-java8        {:mvn/version "4.4.8"}
+        org.igniterealtime.smack/smack-omemo-signal {:mvn/version "4.4.8"}
+        listora/again                               {:mvn/version "1.0.0"}
+
+        clj-http/clj-http                           {:mvn/version "3.12.3"}
+        cheshire/cheshire                           {:mvn/version "5.13.0"}
+        hiccup/hiccup                               {:mvn/version "2.0.0"}
+        org.babashka/http-client                    {:mvn/version "0.4.15"}
+        babashka/fs                                 {:mvn/version "0.5.23"}
+        babashka/process                            {:mvn/version "0.5.21"}
+        io.github.tonsky/clj-simple-router          {:mvn/version "0.1.0"}
+        ring/ring                                   {:mvn/version "1.15.3"}
+        ring/ring-defaults                          {:mvn/version "0.7.0"}
+        ring/ring-jetty-adapter                     {:mvn/version "1.15.3"}
+        integrant/integrant                         {:mvn/version "1.0.1"}
+        jarohen/chime                               {:mvn/version "0.3.3"}
+        com.fulcrologic/guardrails                  {:mvn/version "1.1.13"}
+        ;; allow guardrails in prod because idc. Perf isn't a huge deal
+
+        buddy/buddy-core                            {:mvn/version "1.12.0-430"}
+        buddy/buddy-sign                            {:mvn/version "3.6.1-359"}
+        buddy/buddy-hashers                         {:mvn/version "2.0.167"}
+        metosin/malli                               {:mvn/version "0.19.2"}
+        zprint/zprint                               {:mvn/version "1.2.9"}
+        org.clojure/clojure                         {:mvn/version "1.12.3"}
+        com.taoensso/telemere-slf4j                 {:mvn/version "1.1.0"}
+        better-cond/better-cond                     {:mvn/version "2.1.5"}}
+ :aliases
+ {:build {:deps       {io.github.clojure/tools.build
+                       {:exclusions  [com.google.guava/guava]
+                        :mvn/version "0.9.6"}}
+          :ns-default build
+          :jvm-opts   ["-Xss2m" ; https://github.com/hyperfiddle/photon/issues/11
+                       "-XX:-OmitStackTraceInFastThrow" ;; RCF
+                      ]
+          :paths      ["src/build"]}
+  :dev   {:extra-paths ["src/dev" "src/test" "resources"]
+          :extra-deps
+          {binaryage/devtools {:mvn/version "1.0.6"}
+           com.gfredericks/debug-repl {:mvn/version "0.0.12"}
+           dev.freeformsoftware/portal-test-reporter
+           {:git/url
+            "https://github.com/JJ-Atkinson/portal-test-reporter.git"
+            :sha "4862723d4c53ea66347f16e16d8cb51143555137"}
+           djblue/portal {:mvn/version "0.58.5"}
+           io.github.tonsky/clj-reload {:mvn/version "0.7.0"}
+           refactor-nrepl/refactor-nrepl {:mvn/version "3.11.0"}
+           cider/cider-nrepl {:mvn/version "0.58.0"}}}
+  :test  {:extra-deps {fulcrologic/fulcro-spec {:mvn/version "3.1.12"}}}}}

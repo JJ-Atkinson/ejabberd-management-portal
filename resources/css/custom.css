@@ -1,0 +1,51 @@
+@layer base {
+  p {
+    @apply mb-3;
+  }
+
+  ul {
+    @apply list-disc;
+  }
+
+  ol {
+    @apply list-decimal;
+  }
+
+  ul, ol {
+    @apply my-3 pl-10;
+  }
+
+  input, textarea {
+    @apply appearance-none outline-none;
+  }
+
+  form {
+    @apply m-0;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply bg-blue-500 hover:bg-blue-700 text-center py-2 px-4 rounded disabled:opacity-50 text-white;
+  }
+
+  .checkbox-input {
+    @apply w-4 h-4 border-2 border-gray-300 cursor-pointer;
+    @apply checked:bg-teal-600 checked:border-teal-600;
+    @apply hover:border-teal-600;
+    @apply focus:border-teal-600 focus:ring-teal-600;
+    appearance: none;
+    background-repeat: no-repeat;
+    background-position: center;
+  }
+
+  .checkbox-input:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z'/%3E%3C/svg%3E");
+  }
+}
+
+@layer utilities {
+  .link {
+    @apply text-blue-600 hover:underline;
+  }
+}

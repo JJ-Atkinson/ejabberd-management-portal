@@ -1,0 +1,28 @@
+{:groups  {:group/owner    "Owner"
+           :group/officer  "Officer"
+           :group/member   "Member"
+           :group/aspirant "Aspirant"
+           :group/bot      "Admin Bot"}
+ :rooms   [{:name                   "Officers"
+            :members                #{:group/officer}
+            :admins                 #{:group/owner}
+            :only-admins-can-speak? false}
+           {:name                   "Announcements"
+            :members                #{:group/owner :group/member}
+            :admins                 #{:group/owner :group/officer}
+            :only-admins-can-speak? true}
+           {:name                   "Announcements all"
+            :members                #{:group/owner :group/officer :group/member :group/aspirant}
+            :admins                 #{:group/owner :group/officer}
+            :only-admins-can-speak? true}
+           {:name                   "General all"
+            :members                #{:group/owner :group/officer :group/member :group/aspirant}
+            :admins                 #{:group/owner :group/officer}
+            :only-admins-can-speak? false}
+           {:name                   "General members"
+            :members                #{:group/owner :group/officer :group/member :group/bot}
+            :admins                 #{:group/owner :group/officer}
+            :only-admins-can-speak? false}]
+ :members [{:name    "Officer 1"
+            :user-id "o1"
+            :groups  #{:group/owner :group/officer :group/member :group/aspirant}}]}

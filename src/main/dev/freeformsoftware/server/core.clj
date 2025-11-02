@@ -52,7 +52,8 @@
                    (:prod)
                    ring-defaults/secure-site-defaults)
              (assoc-in [:security :anti-forgery] false)
-             (assoc-in [:security :frame-options] :deny)))
+             (assoc-in [:security :frame-options] :deny)
+             (assoc-in [:security :ssl-redirect] false)))
         (wrap-static-cache))))
 
 (defmethod ig/init-key ::server

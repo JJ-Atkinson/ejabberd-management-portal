@@ -1,7 +1,6 @@
 (ns dev.freeformsoftware.ui.pages.signup
   (:require
    [dev.freeformsoftware.ejabberd.ejabberd-api :as api]
-   [dev.freeformsoftware.ejabberd.sync-state :as sync-state]
    [dev.freeformsoftware.db.file-interaction :as file-db]
    [dev.freeformsoftware.ui.html-fragments :as ui.frag]
    [hiccup2.core :as h]))

@@ -28,10 +28,12 @@
               :body (json/generate-string payload)
               :as :json
               :throw-exceptions false}
-        response (http/request opts)]
+        response (http/request opts)] 
     (tel/log! :debug ["API request" {:endpoint endpoint
                                      :payload payload
                                      :status (:status response)}])
+
+    (tap> {:req opts :resp response})
     (if (= 200 (:status response))
       (:body response)
       (do

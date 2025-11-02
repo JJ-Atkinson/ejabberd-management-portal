@@ -21,7 +21,8 @@
    [clojure.string :as str]
    [camel-snake-kebab.core :as csk]
    [integrant.core :as ig]
-   [taoensso.telemere :as tel])
+   [taoensso.telemere :as tel]
+   [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot])
   (:import
    [org.jxmpp.jid Jid]
    [org.jxmpp.jid.impl JidCreate]))
@@ -274,7 +275,9 @@
    
    Creates a fully-connected mesh where all managed users are in each other's
    rosters with subscription 'both'. Roster groups are assigned based on the
-   user's :groups membership."
+   user's :groups membership.
+   
+   OPTIMIZATION: Only updates roster items that have changed (different groups or nick)."
   [ejabberd-api members groups xmpp-domain]
   (let [report (atom [])]
     (doseq [member-a members]
@@ -288,7 +291,10 @@
                                  (tel/log! :warn
                                            ["Failed to get roster"
                                             {:user user-a :error (ex-message e)}])
-                                 []))]
+                                 []))
+
+              ;; Build lookup map: jid -> roster item
+              roster-lookup (into {} (map (fn [item] [(:jid item) item]) current-roster))]
 
           ;; Build target roster - all other managed users
           (doseq [member-b members
@@ -298,37 +304,36 @@
                   nick-b (:name member-b)
                   groups-b (vec (build-roster-groups (:groups member-b) groups))
 
-                  ;; Check if roster item exists
-                  existing-item (some #(when (= (:jid %) jid-b) %) current-roster)]
+                  ;; Check if roster item exists with correct values
+                  existing-item (get roster-lookup jid-b)
+                  existing-groups (set (:groups existing-item))
+                  target-groups (set groups-b)
 
-              ;; Always re-add to ensure groups are correct. Delete first if exists
-              (when existing-item
+                  needs-update? (or (nil? existing-item)
+                                    (not= existing-groups target-groups)
+                                    (not= (:nick existing-item) nick-b))]
+
+              ;; Only update if something changed
+              (when needs-update?
                 (try
-                  (api/delete-rosteritem ejabberd-api user-a xmpp-domain user-b xmpp-domain)
+                  (api/add-rosteritem ejabberd-api
+                                      user-a
+                                      xmpp-domain
+                                      user-b
+                                      xmpp-domain
+                                      nick-b
+                                      groups-b
+                                      "both")
+                  (swap! report conj
+                         {:action :roster-updated
+                          :user user-a
+                          :contact user-b
+                          :groups groups-b
+                          :was-new? (nil? existing-item)})
                   (catch Exception e
                     (tel/log! :warn
-                              ["Failed to delete existing roster item"
-                               {:user user-a :target user-b :error (ex-message e)}]))))
-
-              ;; Add roster item with all groups in a single call
-              (try
-                (api/add-rosteritem ejabberd-api
-                                    user-a
-                                    xmpp-domain
-                                    user-b
-                                    xmpp-domain
-                                    nick-b
-                                    groups-b
-                                    "both")
-                (swap! report conj
-                       {:action :roster-added
-                        :user user-a
-                        :contact user-b
-                        :groups groups-b})
-                (catch Exception e
-                  (tel/log! :warn
-                            ["Failed to add roster item"
-                             {:user user-a :target user-b :groups groups-b :error (ex-message e)}]))))))))
+                              ["Failed to update roster item"
+                               {:user user-a :target user-b :groups groups-b :error (ex-message e)}])))))))))
     @report))
 
 ;; compute-affiliation moved to room-membership namespace
@@ -368,8 +373,11 @@
    - Member: User's :groups intersect with room's :members (but not :admins)
    - None: No intersection
    
-   Sends notifications via admin-bot when affiliations change."
-  [ejabberd-api rooms members xmpp-domain muc-service admin-bot]
+   Sends notifications via admin-bot when affiliations change.
+   
+   OPTIMIZATION: Only calls set-room-affiliation when affiliation needs to change.
+   Accepts pre-fetched room-affiliations-map to avoid redundant API calls."
+  [ejabberd-api rooms members xmpp-domain muc-service admin-bot room-affiliations-map]
   (let [report (atom [])]
     (doseq [room rooms
             :when (:room-id room)]
@@ -377,61 +385,59 @@
             room-name (:name room)]
         (tel/log! :debug ["Syncing affiliations for room" {:room-id room-id}])
 
-        ;; Get current affiliations for this room
-        (let [current-affiliations
-              (try
-                (let [affs (api/get-room-affiliations ejabberd-api room-id muc-service)]
-                  (into {}
-                        (map (fn [aff]
-                               (let [jid-str (:jid aff)
-                                     ^Jid jid (JidCreate/from ^CharSequence jid-str)
-                                     username (str (.getLocalpartOrNull jid))]
-                                 [username (:affiliation aff)]))
-                             affs)))
-                (catch Exception e
-                  (tel/log! :warn ["Failed to get current affiliations" {:room room-id :error (ex-message e)}])
-                  {}))]
+        ;; Use pre-fetched affiliations
+        (let [current-affiliations (get room-affiliations-map room-id {})]
 
-          ;; For each managed member, compute and set affiliation
+          ;; For each managed member, compute and set affiliation if changed
           (doseq [member members]
             (let [user-id (:user-id member)
                   user-groups (:groups member)
                   target-affiliation (room-membership/compute-room-affiliation user-groups
                                                                                (:admins room)
                                                                                (:members room))
-                  current-affiliation (get current-affiliations user-id "none")]
+                  current-affiliation (get current-affiliations user-id "none")
+                  needs-update? (not= current-affiliation target-affiliation)]
 
-              (try
-                (api/set-room-affiliation ejabberd-api
-                                          room-id
-                                          user-id
-                                          xmpp-domain
-                                          target-affiliation
-                                          muc-service)
+              ;; Only make API call if affiliation needs to change
+              (if needs-update?
+                (try
+                  (api/set-room-affiliation ejabberd-api
+                                            room-id
+                                            user-id
+                                            xmpp-domain
+                                            target-affiliation
+                                            muc-service)
 
-                ;; Notify user if affiliation changed and it's not the admin
-                (when (not= user-id "admin")
-                  (notify-room-change admin-bot
-                                      user-id
-                                      room-name
-                                      room-id
-                                      muc-service
-                                      current-affiliation
-                                      target-affiliation))
+                  ;; Notify user if it's not the admin
+                  (when (not= user-id (:user-id admin-bot/member-admin-bot))
+                    (notify-room-change admin-bot
+                                        user-id
+                                        room-name
+                                        room-id
+                                        muc-service
+                                        current-affiliation
+                                        target-affiliation))
 
+                  (swap! report conj
+                         {:action :affiliation-updated
+                          :room room-id
+                          :user user-id
+                          :old-affiliation current-affiliation
+                          :new-affiliation target-affiliation})
+                  (catch Exception e
+                    (tel/log! :warn
+                              ["Failed to set room affiliation"
+                               {:room room-id
+                                :user user-id
+                                :affiliation target-affiliation
+                                :error (ex-message e)}])))
+
+                ;; Affiliation already correct, no API call needed
                 (swap! report conj
-                       {:action :affiliation-set
+                       {:action :affiliation-unchanged
                         :room room-id
                         :user user-id
-                        :affiliation target-affiliation
-                        :changed? (not= current-affiliation target-affiliation)})
-                (catch Exception e
-                  (tel/log! :warn
-                            ["Failed to set room affiliation"
-                             {:room room-id
-                              :user user-id
-                              :affiliation target-affiliation
-                              :error (ex-message e)}]))))))))
+                        :affiliation current-affiliation})))))))
     @report))
 
 (defn- sync-bookmarks
@@ -441,42 +447,68 @@
    member, admin, or owner affiliation. Rooms with 'none' or 'outcast'
    affiliation are not bookmarked.
    
-   Bookmarks use the user's user-id as the nickname and default to autojoin=true."
-  [ejabberd-api members rooms xmpp-domain muc-service]
+   Bookmarks use the user's user-id as the nickname and default to autojoin=true.
+   
+   OPTIMIZATION: Only calls set-user-bookmarks when bookmark list has changed."
+  [ejabberd-api members rooms xmpp-domain muc-service room-affiliations-map]
   (let [report (atom [])]
     (doseq [member members]
       (let [user-id (:user-id member)]
         (tel/log! :debug ["Syncing bookmarks for" {:user user-id}])
 
         (try
-          ;; Get current affiliations for this user across all rooms
-          (let [user-bookmarks
-                (for [room rooms
-                      :when (:room-id room)
-                      :let [room-id (:room-id room)
-                            affs (try
-                                   (api/get-room-affiliations ejabberd-api room-id muc-service)
-                                   (catch Exception e
-                                     (tel/log! :warn ["Failed to get room affiliations for bookmarks"
-                                                      {:room room-id :error (ex-message e)}])
-                                     []))
-                            user-aff (some #(when (clojure.string/includes? (:jid %) user-id)
-                                              (:affiliation %))
-                                           affs)]
-                      :when (and user-aff
-                                 (not= user-aff "none")
-                                 (not= user-aff "outcast"))]
-                  {:jid (str room-id "@" muc-service)
-                   :name (:name room)
-                   :autojoin true
-                   :nick user-id})]
+          ;; Build target bookmark list
+          (let [target-bookmarks
+                (vec
+                 (for [[room-id affiliations] room-affiliations-map
+                       :let [room (some #(when (= (:room-id %) room-id) %) rooms)
+                             user-aff (some #(when (str/includes? (:jid %) user-id)
+                                               (:affiliation %))
+                                            affiliations)]
+                       :when (and room
+                                  user-aff
+                                  (not= user-aff "none")
+                                  (not= user-aff "outcast"))]
+                   {:jid (str room-id "@" muc-service)
+                    :name (:name room)
+                    :autojoin true
+                    :nick user-id}))
 
-            ;; Set bookmarks for this user
-            (api/set-user-bookmarks ejabberd-api user-id user-bookmarks)
-            (swap! report conj
-                   {:action :bookmarks-synced
-                    :user user-id
-                    :bookmark-count (count user-bookmarks)}))
+                ;; Get current bookmarks to compare
+                current-bookmarks (try
+                                    (vec (api/get-user-bookmarks ejabberd-api user-id))
+                                    (catch Exception e
+                                      (tel/log! :debug ["No existing bookmarks or error fetching"
+                                                        {:user user-id :error (ex-message e)}])
+                                      []))
+
+                ;; Normalize for comparison (sort by jid, keep only relevant fields)
+                normalize-bookmarks (fn [bms]
+                                      (sort-by :jid (map (fn [bm]
+                                                           (-> bm
+                                                               (select-keys [:jid :name :autojoin :nick])
+                                                               (update :autojoin #(if (= % "false") false true))))
+                                                         bms)))
+
+                current-normalized (normalize-bookmarks current-bookmarks)
+                target-normalized (normalize-bookmarks target-bookmarks)
+
+                needs-update? (not= current-normalized target-normalized)]
+
+            ;; Only update if bookmarks changed
+            (if needs-update?
+              (do
+                (api/set-user-bookmarks ejabberd-api user-id target-bookmarks)
+                (swap! report conj
+                       {:action :bookmarks-updated
+                        :user user-id
+                        :bookmark-count (count target-bookmarks)
+                        :was-empty? (empty? current-bookmarks)}))
+
+              (swap! report conj
+                     {:action :bookmarks-unchanged
+                      :user user-id
+                      :bookmark-count (count target-bookmarks)})))
 
           (catch Exception e
             (tel/log! :warn
@@ -595,22 +627,52 @@
                                (:groups working-state)
                                xmpp-domain))
 
-;; Phase 6: Sync affiliations
+        ;; Phase 5.5: Fetch room affiliations ONCE for both phases 6 and 7
+        ;; Store in two formats to avoid redundant API calls
+        room-affiliations-raw
+        (into {}
+              (for [room (:rooms working-state)
+                    :when (:room-id room)
+                    :let [room-id (:room-id room)
+                          affs (try
+                                 (api/get-room-affiliations ejabberd-api room-id muc-service)
+                                 (catch Exception e
+                                   (tel/log! :warn ["Failed to get room affiliations"
+                                                    {:room room-id :error (ex-message e)}])
+                                   []))]]
+                [room-id affs]))
+
+        ;; Transform for sync-affiliations: room-id -> {username -> affiliation-string}
+        room-affiliations-map
+        (into {}
+              (for [[room-id affs] room-affiliations-raw]
+                [room-id
+                 (into {}
+                       (map (fn [aff]
+                              (let [jid-str (:jid aff)
+                                    ^Jid jid (JidCreate/from ^CharSequence jid-str)
+                                    username (str (.getLocalpartOrNull jid))]
+                                [username (:affiliation aff)]))
+                            affs))]))
+
+        ;; Phase 6: Sync affiliations
         _ (swap! all-reports concat
                  (sync-affiliations ejabberd-api
                                     (:rooms working-state)
                                     (:members working-state)
                                     xmpp-domain
                                     muc-service
-                                    (:admin-bot component)))
+                                    (:admin-bot component)
+                                    room-affiliations-map))
 
-        ;; Phase 7: Sync bookmarks
+        ;; Phase 7: Sync bookmarks (uses raw affiliations list)
         _ (swap! all-reports concat
                  (sync-bookmarks ejabberd-api
                                  (:members working-state)
                                  (:rooms working-state)
                                  xmpp-domain
-                                 muc-service))
+                                 muc-service
+                                 room-affiliations-raw))
 
         ;; Phase 8: Update tracking state
         final-state-with-bot (update-tracking-state working-state)

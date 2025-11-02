@@ -1,7 +1,7 @@
 (ns dev.freeformsoftware.ui.pages.signup
   (:require
-   [dev.freeformsoftware.ejabberd.ejabberd-api :as api]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.ejabberd.sync-state :as sync-state]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.ui.html-fragments :as ui.frag]
    [hiccup2.core :as h]))
 
@@ -66,46 +66,46 @@
 (defn handle-signup-post
   "Handles POST request for signup - validates passwords and creates account."
   [{:keys [ejabberd-api sync-state user-db] :as conf} request]
-  (let [claims           (:jwt-claims request)
-        user-id          (:user-id claims)
-        name             (:name claims)
-        params           (:params request)
-        password         (:password params)
+  (let [claims (:jwt-claims request)
+        user-id (:user-id claims)
+        name (:name claims)
+        params (:params request)
+        password (:password params)
         confirm-password (:confirm-password params)]
     (cond
       (not= password confirm-password)
-      {:status  400
+      {:status 400
        :headers {"Content-Type" "text/html"}
-       :body    (str (h/html
-                      (signup-form conf name "Passwords do not match. Please try again.")))}
+       :body (str (h/html
+                   (signup-form conf name "Passwords do not match. Please try again.")))}
 
       (< (count password) 12)
-      {:status  400
+      {:status 400
        :headers {"Content-Type" "text/html"}
-       :body    (str (h/html
-                      (signup-form conf name "Password must be at least 12 characters long.")))}
+       :body (str (h/html
+                   (signup-form conf name "Password must be at least 12 characters long.")))}
 
       (:locked? (file-db/read-lock-state user-db))
-      {:status  400
+      {:status 400
        :headers {"Content-Type" "text/html"}
-       :body    (str (h/html
-                      (signup-form conf name "Please wait a minute. The server is processing a refresh.")))}
+       :body (str (h/html
+                   (signup-form conf name "Please wait a minute. The server is processing a refresh.")))}
 
       :else
-      ;; Passwords match and meet requirements
+;; Passwords match and meet requirements
       (try
-        (api/change-password ejabberd-api user-id password)
+        (sync-state/update-password sync-state user-id password)
         (let [db (file-db/read-user-db user-db)
               db (dissoc db :!allow-insecure-signup-for-user)]
           (file-db/write-user-db user-db db))
-        {:status  200
+        {:status 200
          :headers {"Content-Type" "text/html"}
-         :body    (str (h/html (signup-confirmation conf name user-id)))}
+         :body (str (h/html (signup-confirmation conf name user-id)))}
         (catch Exception e
-          {:status  500
+          {:status 500
            :headers {"Content-Type" "text/html"}
-           :body    (str (h/html
-                          (signup-form conf name (str "Failed to set password: " (ex-message e)))))})))))
+           :body (str (h/html
+                       (signup-form conf name (str "Failed to set password: " (ex-message e)))))})))))
 
 (defn routes
   [conf]

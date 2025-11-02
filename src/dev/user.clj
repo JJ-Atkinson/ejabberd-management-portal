@@ -8,14 +8,11 @@
    [clojure-mcp.main]
    [jarrett.development]))
 
-
 (defmacro e->nil [form] `(try ~form (catch Exception e# nil)))
 
      ;; prevents compilation lockup for prod since clj-reload isn't on prod/build
 (when-let [clj-reload-init (e->nil (requiring-resolve 'clj-reload/init))]
   (clj-reload-init {:dirs ["src/dev" "src/main" "src/test"]}))
-
-(tel/set-min-level! :debug)
 
 ^:clj-reload/keep
 (defonce !system (atom nil))
@@ -34,7 +31,7 @@
   []
   (println "Starting system!")
   (reset! !system
-    (ig/init (#'config/resolve-config! false)))
+          (ig/init (#'config/resolve-config! false)))
   (when-not @!mcp-started?
     (clojure-mcp.main/start-mcp-server {:port 7888})
     (reset! !mcp-started? true)))
@@ -72,7 +69,7 @@
 
 (defn restart
   []
-  (let [now          (System/currentTimeMillis)
+  (let [now (System/currentTimeMillis)
         last-restart @!last-restarted-at]
     (reset! !last-restarted-at now)
     ;; if a user restarts twice within 5s, we do a full hard restart
@@ -96,5 +93,7 @@
 
 (comment
   (tap> :test)
-
-)
+  (go)
+  (stop)
+  (restart)
+  (restart-hard!))

@@ -45,7 +45,7 @@
                    (every? keyword? key))))
   {::nref (if (keyword? key) [key] key)})
 
-(defn reader-file-str 
+(defn reader-file-str
   [key]
   (str/trim (slurp key)))
 

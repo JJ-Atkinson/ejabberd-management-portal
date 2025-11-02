@@ -14,7 +14,7 @@
   (:require
    [again.core :as again]
    [babashka.fs :as fs]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.db.util :as db-util]
    [dev.freeformsoftware.ejabberd.ejabberd-api :as api]
    [dev.freeformsoftware.ejabberd.admin-bot-actions :as actions]

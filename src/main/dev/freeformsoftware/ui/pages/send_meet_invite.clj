@@ -6,7 +6,7 @@
   (:require
    [camel-snake-kebab.core :as csk]
    [clojure.string :as str]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot]
    [dev.freeformsoftware.ejabberd.admin-bot-actions :as bot-actions]
    [dev.freeformsoftware.link-provider :as link-provider]

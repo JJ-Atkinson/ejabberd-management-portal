@@ -33,7 +33,8 @@
         zprint/zprint                               {:mvn/version "1.2.9"}
         org.clojure/clojure                         {:mvn/version "1.12.3"}
         com.taoensso/telemere-slf4j                 {:mvn/version "1.1.0"}
-        better-cond/better-cond                     {:mvn/version "2.1.5"}}
+        better-cond/better-cond                     {:mvn/version "2.1.5"}
+        com.nextjournal/beholder                    {:mvn/version "1.0.3"}}
  :aliases
  {:build {:deps       {io.github.clojure/tools.build
                        {:exclusions  [com.google.guava/guava]

@@ -1,7 +1,7 @@
 (ns dev.freeformsoftware.ui.pages.room-management
   (:require
    [clojure.string :as str]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.ejabberd.sync-state :as sync-state]
    [dev.freeformsoftware.ui.html-fragments :as ui.frag]
    [hiccup2.core :as h]
@@ -284,8 +284,14 @@
    we should return the room-form-fragment with the errors listed."
   [{:keys [sync-state] :as conf} {:keys [params]}]
   (let [{:keys [create? room-def] :as params} (parse-room-form-params params)
-        {:keys [success? errors error-value] :as ss} (sync-state/swap-state! sync-state #(swap-room % params))
         {:keys [room-id]} room-def
+        reason (if create?
+                 (str "Creating new room: " (:name room-def))
+                 (str "Updating room: " (:name room-def)))
+        {:keys [success? errors error-value] :as ss} (sync-state/swap-state!
+                                                      sync-state
+                                                      {:reason reason}
+                                                      #(swap-room % params))
         form-id (if create? "room-form-fragment-create" "room-form-fragment-edit")]
 
     (cond
@@ -308,6 +314,7 @@
   [{:keys [sync-state]} {[room-id] :path-params}]
   (sync-state/swap-state!
    sync-state
+   {:reason (str "Deleting room: " room-id)}
    (fn [user-db]
      (update user-db
              :rooms

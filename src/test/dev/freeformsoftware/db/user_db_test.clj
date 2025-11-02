@@ -1,11 +1,11 @@
-(ns dev.freeformsoftware.db.file-interaction-test
+(ns dev.freeformsoftware.db.user-db-test
   "Comprehensive test suite for file-interaction component."
   (:require
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [fulcro-spec.core :refer [specification =check=> behavior assertions]]
    [fulcro-spec.check :as check :refer [checker]]
-   [dev.freeformsoftware.db.file-interaction :as sut]
+   [dev.freeformsoftware.db.user-db :as sut]
    [dev.freeformsoftware.db.schema :as schema]
    [integrant.core :as ig]
    [taoensso.telemere :as tel]))

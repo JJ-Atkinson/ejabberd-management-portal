@@ -12,7 +12,7 @@
   (:require
    [better-cond.core :as b]
    [dev.freeformsoftware.ejabberd.ejabberd-api :as api]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.db.schema :as schema]
    [dev.freeformsoftware.db.util :as db-util]
    [dev.freeformsoftware.ejabberd.room-membership :as room-membership]
@@ -21,7 +21,8 @@
    [camel-snake-kebab.core :as csk]
    [integrant.core :as ig]
    [taoensso.telemere :as tel]
-   [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot])
+   [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot]
+   [dev.freeformsoftware.db.user-db :as user-db])
   (:import
    [org.jxmpp.jid Jid]
    [org.jxmpp.jid.impl JidCreate]))
@@ -703,6 +704,7 @@
    
    Parameters:
    - component: sync-state component (contains user-db, ejabberd-api, etc.)
+   - opts: Map with :reason key explaining why the swap is happening (for logging)
    - f: Function that takes the current user-db state and returns the modified state
    - args: Additional arguments to pass to f (optional)
    
@@ -715,49 +717,53 @@
    
    Usage:
    (swap-state! sync-component
+                {:reason \"Adding new member\"}
                 (fn [db]
                   (update db :members conj new-member)))
    
    (swap-state! sync-component
+                {:reason \"Updating member name\"}
                 update-in
                 [:members 0 :name]
                 \"New Name\")"
-  [{:keys [user-db sync-timeout-s] :as component} f & args]
+  [{:keys [user-db sync-timeout-s !last-written-sync-result-sha] :as component} {:keys [reason]} f & args]
   (b/cond
-    :let [{:keys [locked? reason expires-at]} (read-lock-state component)]
+    :let [{:keys [locked? expires-at] lock-reason :reason} (read-lock-state component)]
 
     locked?
     {:success? false
-     :errors [(str "State is currently locked for " reason ". This will expire at the latest by " expires-at)]}
+     :errors   [(str "State is currently locked for " lock-reason ". This will expire at the latest by " expires-at)]}
 
     :else
     (try
       (b/cond
-        :do (tel/log! :info ["Starting swap-state!"])
+        :do (tel/log! :info ["Starting swap-state!" {:reason reason}])
         :let [current-db (file-db/read-user-db user-db)]
 
-        :do (tel/log! :debug ["Applying swap function"])
+        :do (tel/log! :debug ["Applying swap function" {:reason reason}])
         :let [new-db (apply f current-db args)]
 
-        :do (tel/log! :debug ["Validating new state"])
+        :do (tel/log! :debug ["Validating new state" {:reason reason}])
         :let [validation-result (schema/validate-user-db new-db)]
 
         (not (:valid? validation-result))
         (do
-          (tel/log! :warn ["Validation failed in swap-state!" validation-result])
-          {:success? false
-           :errors (:errors validation-result)
+          (tel/log! :warn ["Validation failed in swap-state!" (assoc validation-result :reason reason)])
+          {:success?    false
+           :errors      (:errors validation-result)
            :error-value (:error-value validation-result)})
 
-        :do (file-db/lock-state! user-db "UI update in progress" (* sync-timeout-s 1000))
-        :do (tel/log! :debug ["Validation passed, starting sync"])
-        :let [sync-result (sync-state! component new-db)
+        :do (file-db/lock-state! user-db (or reason "swap-state! update") (* sync-timeout-s 1000))
+        :do (tel/log! :debug ["Validation passed, starting sync" {:reason reason}])
+        :let [sync-result  (sync-state! component new-db)
               synced-state (:state sync-result)]
 
-        :do (tel/log! :debug ["Sync complete, writing to disk"])
-        :let [written-db (file-db/write-user-db user-db synced-state)]
+        :do (tel/log! :debug ["Sync complete, writing to disk" {:reason reason}])
+        :let [written-db (file-db/write-user-db user-db synced-state)
+              sha        (file-db/compute-current-sha user-db)]
 
-        :do (tel/log! :info ["swap-state! completed successfully"])
+        :do (reset! !last-written-sync-result-sha sha)
+        :do (tel/log! :info ["swap-state! completed successfully" {:reason reason}])
 
         :else
         (assoc sync-result :success? true :state written-db))
@@ -766,13 +772,19 @@
         (tel/log! :error
                   ["swap-state! failed with exception"
                    {:exception (ex-message e)
-                    :data (ex-data e)}])
-        {:success? false
-         :errors [(ex-message e)]
+                    :data      (ex-data e)
+                    :reason    reason}])
+        {:success?    false
+         :errors      [(ex-message e)]
          :error-value (or (ex-data e) e)})
 
       (finally
-        (file-db/clear-lock! user-db)))))
+       (file-db/clear-lock! user-db)))))
+
+(defn get-last-written-sync-state-sha
+  "After swap-state! is invoked, the new userdb.edn is written. The sha of that file is stored here."
+  [{:keys [!last-written-sync-result-sha]}]
+  @!last-written-sync-result-sha)
 
 (defn update-password
   "Updates a managed user's password in ejabberd.
@@ -826,7 +838,8 @@
               :managed-muc-options managed-muc-options
               :sync-timeout-s sync-timeout-s
               :env env
-              :default-test-password default-test-password}]
+              :default-test-password default-test-password
+              :!last-written-sync-result-sha (atom (user-db/compute-current-sha user-db))}]
     (def testing-conf* conf)
     conf))
 

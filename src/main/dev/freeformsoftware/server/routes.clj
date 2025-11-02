@@ -8,7 +8,7 @@
    [dev.freeformsoftware.ui.pages :as ui.pages]
    [dev.freeformsoftware.ui.pages.signup :as ui.pages.signup]
    [dev.freeformsoftware.ui.pages.send-meet-invite :as ui.pages.send-meet-invite]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.link-provider :as link-provider]
    [ring.util.response :as resp]))
 

@@ -11,6 +11,8 @@
                 :audience "jitsi"
                 :subject  "meet.jitsi"}
  :muc-service "conference.yourserverhere.org"
+
+ ;; only used in the dev environment - otherwise a random password is generated every time
  :default-test-password "TEMPORARY_PASSWORD_CHANGE_ME"
  :sync-state-timeout-s 600
  :managed-muc-options {:allow_change_subj                    "false"

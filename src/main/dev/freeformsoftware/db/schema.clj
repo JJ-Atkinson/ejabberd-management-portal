@@ -169,12 +169,15 @@
 (def user-db-schema
   "Complete schema for the user database.
    Validates groups first, then uses dynamic binding to validate rooms and members.
-   :do-not-edit-state is optional and maintained automatically by the file-interaction component."
+   :do-not-edit-state is optional and maintained automatically by the file-interaction component.
+   :!allow-insecure-signup-for-user is optional and if set, enables a /getting-started route
+   that provides a pre-signed signup link for the specified user-id (INSECURE - for development only)."
   [:map {:closed true}
    [:groups groups-schema]
    [:rooms rooms-schema]
    [:members members-schema]
-   [:do-not-edit-state {:optional true} do-not-edit-state-schema]])
+   [:do-not-edit-state {:optional true} do-not-edit-state-schema]
+   [:!allow-insecure-signup-for-user {:optional true} non-blank-string]])
 
 ;; =============================================================================
 ;; Validation functions with human-readable errors

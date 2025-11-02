@@ -8,6 +8,8 @@
    [dev.freeformsoftware.ui.pages :as ui.pages]
    [dev.freeformsoftware.ui.pages.signup :as ui.pages.signup]
    [dev.freeformsoftware.ui.pages.send-meet-invite :as ui.pages.send-meet-invite]
+   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.link-provider :as link-provider]
    [ring.util.response :as resp]))
 
 (set! *warn-on-reflection* true)
@@ -27,29 +29,40 @@
 (defn etc-routes
   [conf]
   {"GET /debug-claims" (fn [request]
-                         {:status  200
+                         {:status 200
                           :headers {"Content-Type" "text/html"}
-                          :body    (str "Authenticated! Claims: " (:jwt-claims request))})})
+                          :body (str "Authenticated! Claims: " (:jwt-claims request))})})
 
 (defn noauth-routes
   [conf]
-  {"GET /health"      (fn [_request]
-                        (let [admin-bot  (:admin-bot conf)
-                              connection (:connection admin-bot)
-                              status     (if connection
-                                           (let [^org.jivesoftware.smack.AbstractXMPPConnection conn connection]
-                                             {:status    "ok"
-                                              :admin-bot {:connected     (.isConnected conn)
-                                                          :authenticated (.isAuthenticated conn)}})
-                                           {:status    "degraded"
-                                            :admin-bot {:connected     false
-                                                        :authenticated false
-                                                        :error         (:error admin-bot)}})]
-                          {:status  200
-                           :headers {"Content-Type" "application/json"}
-                           :body    (json/generate-string status)}))
+  {"GET /health" (fn [_request]
+                   (let [admin-bot (:admin-bot conf)
+                         connection (:connection admin-bot)
+                         status (if connection
+                                  (let [^org.jivesoftware.smack.AbstractXMPPConnection conn connection]
+                                    {:status "ok"
+                                     :admin-bot {:connected (.isConnected conn)
+                                                 :authenticated (.isAuthenticated conn)}})
+                                  {:status "degraded"
+                                   :admin-bot {:connected false
+                                               :authenticated false
+                                               :error (:error admin-bot)}})]
+                     {:status 200
+                      :headers {"Content-Type" "application/json"}
+                      :body (json/generate-string status)}))
+   "GET /getting-started" (fn [_request]
+                            (let [db (file-db/read-user-db (:user-db conf))
+                                  user-id (:!allow-insecure-signup-for-user db)]
+                              (if-not user-id
+                                (auth-middleware/unauthorized-response conf)
+                                (resp/redirect
+                                 (link-provider/create-password-reset-url
+                                  (:link-provider conf)
+                                  user-id
+                                  user-id
+                                  :duration-hours 24)))))
    "GET /favicon.ico" (constantly {:status 404
-                                   :body   nil})})
+                                   :body nil})})
 
 (defn prod-routes
   [conf]
@@ -67,29 +80,29 @@
 
 (defn dev-routes
   [conf]
-  {"GET /dev/reload-ws"   websocket/reload-handler
-   "GET /dev/login"       (fn [_]
-                            (let [admin-jwt (jwt/create-jwt
-                                             {:secret   (:jwt-secret conf)
-                                              :audience (:management-portal-url-base conf)}
-                                             {:role :admin
-                                              :user "dev-admin"}
-                                             :duration-hours
-                                             24)]
-                              (resp/redirect (str "/?jwt=" admin-jwt))))
+  {"GET /dev/reload-ws" websocket/reload-handler
+   "GET /dev/login" (fn [_]
+                      (let [admin-jwt (jwt/create-jwt
+                                       {:secret (:jwt-secret conf)
+                                        :audience (:management-portal-url-base conf)}
+                                       {:role :admin
+                                        :user "dev-admin"}
+                                       :duration-hours
+                                       24)]
+                        (resp/redirect (str "/?jwt=" admin-jwt))))
    "GET /dev/test-signup" (fn [_]
                             (let [signup-jwt (jwt/create-jwt
-                                              {:secret   (:jwt-secret conf)
+                                              {:secret (:jwt-secret conf)
                                                :audience (:management-portal-url-base conf)}
-                                              {:role    :signup
+                                              {:role :signup
                                                :user-id "jamess"
-                                               :name    "James Smith"}
+                                               :name "James Smith"}
                                               :duration-hours
                                               24)]
                               (resp/redirect (str "/signup?jwt=" signup-jwt))))
-   "GET /dev/logout"      (fn [_]
-                            (-> (resp/redirect "/")
-                                (resp/set-cookie "jwt" "" {:max-age 0 :path "/"})))})
+   "GET /dev/logout" (fn [_]
+                       (-> (resp/redirect "/")
+                           (resp/set-cookie "jwt" "" {:max-age 0 :path "/"})))})
 
 (defn create-routes
   [{:keys [env] :as conf}]

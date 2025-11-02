@@ -434,6 +434,60 @@
                               :error (ex-message e)}]))))))))
     @report))
 
+(defn- sync-bookmarks
+  "Synchronizes bookmarks for all managed users based on room affiliations.
+   
+   For each user, creates bookmarks for all rooms where they have
+   member, admin, or owner affiliation. Rooms with 'none' or 'outcast'
+   affiliation are not bookmarked.
+   
+   Bookmarks use the user's user-id as the nickname and default to autojoin=true."
+  [ejabberd-api members rooms xmpp-domain muc-service]
+  (let [report (atom [])]
+    (doseq [member members]
+      (let [user-id (:user-id member)]
+        (tel/log! :debug ["Syncing bookmarks for" {:user user-id}])
+
+        (try
+          ;; Get current affiliations for this user across all rooms
+          (let [user-bookmarks
+                (for [room rooms
+                      :when (:room-id room)
+                      :let [room-id (:room-id room)
+                            affs (try
+                                   (api/get-room-affiliations ejabberd-api room-id muc-service)
+                                   (catch Exception e
+                                     (tel/log! :warn ["Failed to get room affiliations for bookmarks"
+                                                      {:room room-id :error (ex-message e)}])
+                                     []))
+                            user-aff (some #(when (clojure.string/includes? (:jid %) user-id)
+                                              (:affiliation %))
+                                           affs)]
+                      :when (and user-aff
+                                 (not= user-aff "none")
+                                 (not= user-aff "outcast"))]
+                  {:jid (str room-id "@" muc-service)
+                   :name (:name room)
+                   :autojoin true
+                   :nick user-id})]
+
+            ;; Set bookmarks for this user
+            (api/set-user-bookmarks ejabberd-api user-id user-bookmarks)
+            (swap! report conj
+                   {:action :bookmarks-synced
+                    :user user-id
+                    :bookmark-count (count user-bookmarks)}))
+
+          (catch Exception e
+            (tel/log! :warn
+                      ["Failed to sync bookmarks"
+                       {:user user-id :error (ex-message e)}])
+            (swap! report conj
+                   {:action :bookmark-sync-failed
+                    :user user-id
+                    :error (ex-message e)})))))
+    @report))
+
 (defn- update-tracking-state
   "Updates :do-not-edit-state in the state map to reflect current managed entities."
   [state]
@@ -541,7 +595,7 @@
                                (:groups working-state)
                                xmpp-domain))
 
-        ;; Phase 6: Sync affiliations
+;; Phase 6: Sync affiliations
         _ (swap! all-reports concat
                  (sync-affiliations ejabberd-api
                                     (:rooms working-state)
@@ -550,10 +604,18 @@
                                     muc-service
                                     (:admin-bot component)))
 
-        ;; Phase 7: Update tracking state
+        ;; Phase 7: Sync bookmarks
+        _ (swap! all-reports concat
+                 (sync-bookmarks ejabberd-api
+                                 (:members working-state)
+                                 (:rooms working-state)
+                                 xmpp-domain
+                                 muc-service))
+
+        ;; Phase 8: Update tracking state
         final-state-with-bot (update-tracking-state working-state)
 
-        ;; Phase 8: Remove admin bot from final state (ghost removal)
+        ;; Phase 9: Remove admin bot from final state (ghost removal)
         final-state (update final-state-with-bot
                             :members
                             (fn [members]

@@ -33,14 +33,15 @@
    
    Returns:
      Full Jitsi meet URL with JWT token"
-  [component name user-jid room & {:keys [moderator? duration-hours avatar]
-                                   :or {moderator? false
-                                        duration-hours 3}}]
-  (let [jwt-secret (:jwt-secret component)
+  [component name user-jid room &
+   {:keys [moderator? duration-hours avatar]
+    :or   {moderator?     false
+           duration-hours 3}}]
+  (let [jwt-secret   (:jwt-secret component)
         jitsi-config (:jitsi-config component)
-        opts (cond-> {:moderator? moderator?
-                      :duration-hours duration-hours}
-               avatar (assoc :avatar-url avatar))]
+        opts         (cond-> {:moderator?     moderator?
+                              :duration-hours duration-hours}
+                       avatar (assoc :avatar-url avatar))]
     ;; Use apply to unpack opts map into keyword arguments
     (apply jwt/create-jitsi-link {:secret jwt-secret} jitsi-config name user-jid room (mapcat identity opts))))
 
@@ -56,16 +57,18 @@
    
    Returns:
      Full URL to management portal with admin JWT token"
-  [component user & {:keys [duration-hours]
-                     :or {duration-hours 24}}]
+  [component user &
+   {:keys [duration-hours]
+    :or   {duration-hours 24}}]
   (let [jwt-secret (:jwt-secret component)
-        base-url (:management-portal-url-base component)
-        admin-jwt (jwt/create-jwt
-                   {:secret jwt-secret
-                    :audience base-url}
-                   {:role :admin
-                    :user user}
-                   :duration-hours duration-hours)]
+        base-url   (:management-portal-url-base component)
+        admin-jwt  (jwt/create-jwt
+                    {:secret   jwt-secret
+                     :audience base-url}
+                    {:role :admin
+                     :user user}
+                    :duration-hours
+                    duration-hours)]
     (str base-url "/?jwt=" admin-jwt)))
 
 (defn create-password-reset-url
@@ -81,17 +84,19 @@
    
    Returns:
      Full URL to signup page with reset JWT token"
-  [component user-id name & {:keys [duration-hours]
-                             :or {duration-hours 24}}]
+  [component user-id name &
+   {:keys [duration-hours]
+    :or   {duration-hours 24}}]
   (let [jwt-secret (:jwt-secret component)
-        base-url (:management-portal-url-base component)
+        base-url   (:management-portal-url-base component)
         signup-jwt (jwt/create-jwt
-                    {:secret jwt-secret
+                    {:secret   jwt-secret
                      :audience base-url}
-                    {:role :signup
+                    {:role    :signup
                      :user-id user-id
-                     :name name}
-                    :duration-hours duration-hours)]
+                     :name    name}
+                    :duration-hours
+                    duration-hours)]
     (str base-url "/signup?jwt=" signup-jwt)))
 
 (defn create-link-generation-page-url
@@ -105,15 +110,17 @@
    
    Returns:
      Full URL to send-meet-invite page with JWT token"
-  [component & {:keys [duration-hours]
-                :or {duration-hours 24}}]
+  [component &
+   {:keys [duration-hours]
+    :or   {duration-hours 24}}]
   (let [jwt-secret (:jwt-secret component)
-        base-url (:management-portal-url-base component)
+        base-url   (:management-portal-url-base component)
         invite-jwt (jwt/create-jwt
-                    {:secret jwt-secret
+                    {:secret   jwt-secret
                      :audience base-url}
                     {:role "meet-invite"}
-                    :duration-hours duration-hours)]
+                    :duration-hours
+                    duration-hours)]
     (str base-url "/send-meet-invite?jwt=" invite-jwt)))
 
 ;; =============================================================================
@@ -122,29 +129,30 @@
 
 (defmethod ig/init-key ::link-provider
   [_ {:keys [jwt-secret management-portal-url-base jitsi-config] :as config}]
-  (tel/log! :info ["Initializing link-provider component"
-                   {:management-portal-url-base management-portal-url-base}])
+  (tel/log! :info
+            ["Initializing link-provider component"
+             {:management-portal-url-base management-portal-url-base}])
 
   (when (or (nil? jwt-secret) (empty? jwt-secret))
     (throw (ex-info "jwt-secret is required for link-provider"
-                    {:type :missing-config
+                    {:type   :missing-config
                      :config config})))
 
   (when (or (nil? management-portal-url-base) (empty? management-portal-url-base))
     (throw (ex-info "management-portal-url-base is required for link-provider"
-                    {:type :missing-config
+                    {:type   :missing-config
                      :config config})))
 
   (when (nil? jitsi-config)
     (throw (ex-info "jitsi-config is required for link-provider"
-                    {:type :missing-config
+                    {:type   :missing-config
                      :config config})))
 
   (tel/log! :info ["Link-provider component initialized successfully"])
   ;; Return plain map with configuration
-  (let [conf {:jwt-secret jwt-secret
+  (let [conf {:jwt-secret                 jwt-secret
               :management-portal-url-base management-portal-url-base
-              :jitsi-config jitsi-config}]
+              :jitsi-config               jitsi-config}]
     (def testing-conf* conf)
     conf))
 
@@ -171,7 +179,7 @@
 
   ;; Create admin signin URL
   (create-admin-signin-url testing-conf*
-                           :user "alice"
+                           :user           "alice"
                            :duration-hours 24)
 
   ;; Create password reset URL

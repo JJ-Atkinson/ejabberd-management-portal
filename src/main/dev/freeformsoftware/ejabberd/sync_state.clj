@@ -12,7 +12,7 @@
   (:require
    [better-cond.core :as b]
    [dev.freeformsoftware.ejabberd.ejabberd-api :as api]
-   [dev.freeformsoftware.db.user-db :as file-db]
+   [dev.freeformsoftware.db.user-db :as user-db]
    [dev.freeformsoftware.db.schema :as schema]
    [dev.freeformsoftware.db.util :as db-util]
    [dev.freeformsoftware.ejabberd.room-membership :as room-membership]
@@ -21,11 +21,10 @@
    [camel-snake-kebab.core :as csk]
    [integrant.core :as ig]
    [taoensso.telemere :as tel]
-   [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot]
-   [dev.freeformsoftware.db.user-db :as user-db])
+   [dev.freeformsoftware.ejabberd.admin-bot :as admin-bot])
   (:import
-   [org.jxmpp.jid Jid]
-   [org.jxmpp.jid.impl JidCreate]))
+    [org.jxmpp.jid Jid]
+    [org.jxmpp.jid.impl JidCreate]))
 
 (set! *warn-on-reflection* true)
 
@@ -33,12 +32,48 @@
 ;; Helper Functions
 ;; =============================================================================
 
-(defn- generate-room-id
-  "Generates a random 10-character alphanumeric room ID.
-   Uses lowercase letters only to avoid confusion."
-  []
-  (let [chars (vec "abcdefghijklmnopqrstuvwxyz")]
-    (apply str (repeatedly 10 #(rand-nth chars)))))
+(defn str->entity-id
+  "Converts an arbitrary string into a sanitized entity ID.
+   
+   Process:
+   1. Converts to kebab-case
+   2. Filters to only ASCII alphanumeric characters (a-z, A-Z, 0-9) and hyphens
+   3. Removes leading/trailing hyphens
+   4. Lowercases the result
+   5. If result is less than 3 characters, pads with random lowercase letters to 9 characters
+   
+   This ensures compatibility with XMPP room IDs and filters out emojis, unicode, and special characters.
+   
+   Examples:
+   (str->entity-id \"My Room\") => \"my-room\"
+   (str->entity-id \"Officers!!!\") => \"officers\"
+   (str->entity-id \"AB\") => \"abxxxxxx\" (where x are random letters)
+   (str->entity-id \"$%^\") => \"xxxxxxxxx\" (all random since no valid chars)
+   (str->entity-id \"Room 🎉\") => \"room\" (emoji filtered out, trailing hyphen removed)"
+  [s]
+  (let [kebab     (csk/->kebab-case s)
+        ;; Only allow ASCII alphanumeric (a-z, A-Z, 0-9) and hyphen
+        filtered  (apply str
+                         (filter (fn [c]
+                                   (or (and (>= (int c) (int \a))
+                                            (<= (int c) (int \z)))
+                                       (and (>= (int c) (int \A))
+                                            (<= (int c) (int \Z)))
+                                       (and (>= (int c) (int \0))
+                                            (<= (int c) (int \9)))
+                                       (= c \-)))
+                                 kebab))
+        ;; Remove leading/trailing hyphens
+        trimmed   (str/replace filtered #"^-+|-+$" "")
+        sanitized (str/lower-case trimmed)
+        ;; If too short, pad with random lowercase letters to 9 chars
+        result    (if (< (count sanitized) 3)
+                    (let [chars          (vec "abcdefghijklmnopqrstuvwxyz")
+                          padding-needed (- 9 (count sanitized))
+                          padding        (apply str (repeatedly padding-needed #(rand-nth chars)))]
+                      (str sanitized padding))
+                    sanitized)]
+    result))
 
 (defn- compute-diffs
   "Computes differences between current state and last tracked state.
@@ -50,10 +85,10 @@
    - :rooms-to-delete - room-ids in :managed-rooms but not in current :rooms"
   [current-state old-tracking]
   (let [current-members (set (map :user-id (:members current-state)))
-        current-rooms (set (keep :room-id (:rooms current-state)))
-        old-members (get-in old-tracking [:managed-members] #{})
-        old-rooms (get-in old-tracking [:managed-rooms] #{})]
-    {:users-to-add (set/difference current-members old-members)
+        current-rooms   (set (keep :room-id (:rooms current-state)))
+        old-members     (get-in old-tracking [:managed-members] #{})
+        old-rooms       (get-in old-tracking [:managed-rooms] #{})]
+    {:users-to-add    (set/difference current-members old-members)
      :users-to-delete (set/difference old-members current-members)
      :rooms-to-create (filterv #(nil? (:room-id %)) (:rooms current-state))
      :rooms-to-delete (set/difference old-rooms current-rooms)}))
@@ -72,7 +107,7 @@
 
       ;; Remove from all managed users' rosters
       (doseq [other-user managed-users
-              :when (not= other-user user-id)]
+              :when      (not= other-user user-id)]
         (try
           (api/delete-rosteritem ejabberd-api
                                  other-user
@@ -80,9 +115,9 @@
                                  user-id
                                  xmpp-domain)
           (swap! report conj
-                 {:action :roster-deleted
-                  :from other-user
-                  :target user-id})
+            {:action :roster-deleted
+             :from   other-user
+             :target user-id})
           (catch Exception e
             (tel/log! :warn
                       ["Failed to remove roster item"
@@ -97,9 +132,9 @@
                                     xmpp-domain
                                     "none")
           (swap! report conj
-                 {:action :affiliation-removed
-                  :room room-id
-                  :user user-id})
+            {:action :affiliation-removed
+             :room   room-id
+             :user   user-id})
           (catch Exception e
             (tel/log! :warn
                       ["Failed to remove room affiliation"
@@ -109,17 +144,17 @@
       (try
         (api/unregister ejabberd-api user-id)
         (swap! report conj
-               {:action :user-unregistered
-                :user-id user-id})
+          {:action  :user-unregistered
+           :user-id user-id})
         (tel/log! :info ["User unregistered successfully" {:user-id user-id}])
         (catch Exception e
           (tel/log! :error
                     ["Failed to unregister user"
                      {:user-id user-id :error (ex-message e)}])
           (swap! report conj
-                 {:action :user-unregister-failed
-                  :user-id user-id
-                  :error (ex-message e)}))))
+            {:action  :user-unregister-failed
+             :user-id user-id
+             :error   (ex-message e)}))))
     @report))
 
 (defn- delete-rooms
@@ -140,9 +175,9 @@
                                     xmpp-domain
                                     "none")
           (swap! report conj
-                 {:action :affiliation-removed
-                  :room room-id
-                  :user user-id})
+            {:action :affiliation-removed
+             :room   room-id
+             :user   user-id})
           (catch Exception e
             (tel/log! :warn
                       ["Failed to remove room affiliation during room deletion"
@@ -152,17 +187,17 @@
       (try
         (api/destroy-room ejabberd-api room-id muc-service)
         (swap! report conj
-               {:action :room-destroyed
-                :room-id room-id})
+          {:action  :room-destroyed
+           :room-id room-id})
         (tel/log! :info ["Room destroyed successfully" {:room-id room-id}])
         (catch Exception e
           (tel/log! :error
                     ["Failed to destroy room"
                      {:room-id room-id :error (ex-message e)}])
           (swap! report conj
-                 {:action :room-destroy-failed
-                  :room-id room-id
-                  :error (ex-message e)}))))
+            {:action  :room-destroy-failed
+             :room-id room-id
+             :error   (ex-message e)}))))
     @report))
 
 (defn- register-users
@@ -188,27 +223,27 @@
         (do
           (tel/log! :info ["User already exists, skipping registration" {:user-id user-id}])
           (swap! report conj
-                 {:action :user-already-exists
-                  :user-id user-id}))
+            {:action  :user-already-exists
+             :user-id user-id}))
 
         :let [temp-password (case env
-                              :prod (db-util/generate-random-password)
+                              :prod        (db-util/generate-random-password)
                               (:dev :test) default-test-password)]
 
         :else
         (try
           (api/register ejabberd-api user-id temp-password)
           (swap! report conj
-                 {:action :user-registered
-                  :user-id user-id})
+            {:action  :user-registered
+             :user-id user-id})
           (catch Exception e
             (tel/log! :error
                       ["Failed to register user"
                        {:user-id user-id :error (ex-message e)}])
             (swap! report conj
-                   {:action :user-registration-failed
-                    :user-id user-id
-                    :error (ex-message e)})))))
+              {:action  :user-registration-failed
+               :user-id user-id
+               :error   (ex-message e)})))))
     @report))
 
 (defn- create-rooms
@@ -218,7 +253,7 @@
    After creating each room, the admin bot is instructed to join it.
    Returns updated rooms vector with :room-id populated for all rooms."
   [ejabberd-api rooms managed-muc-options muc-service admin-bot]
-  (let [report (atom [])
+  (let [report        (atom [])
         updated-rooms (atom [])]
 
     (doseq [room rooms]
@@ -227,10 +262,10 @@
         (swap! updated-rooms conj room)
 
         ;; Room needs creation - use kebab-case for room-id
-        (let [room-id (csk/->kebab-case (:name room))
+        (let [room-id   (str->entity-id (:name room))
               room-opts (merge managed-muc-options
                                (if (:only-admins-can-speak? room)
-                                 {:moderated "true"
+                                 {:moderated          "true"
                                   :members_by_default "false"}
                                  {:moderated "false"}))]
           (tel/log! :info ["Creating room" {:name (:name room) :room-id room-id}])
@@ -240,9 +275,9 @@
             (let [updated-room (assoc room :room-id room-id)]
               (swap! updated-rooms conj updated-room)
               (swap! report conj
-                     {:action :room-created
-                      :name (:name room)
-                      :room-id room-id})
+                {:action  :room-created
+                 :name    (:name room)
+                 :room-id room-id})
 
               ;; Join the newly created room with the admin bot
               (when admin-bot
@@ -254,13 +289,13 @@
               ;; Still add room to list without :room-id on failure
               (swap! updated-rooms conj room)
               (swap! report conj
-                     {:action :room-creation-failed
-                      :name (:name room)
-                      :room-id room-id
-                      :error (ex-message e)}))))))
+                {:action  :room-creation-failed
+                 :name    (:name room)
+                 :room-id room-id
+                 :error   (ex-message e)}))))))
 
     {:updated-rooms @updated-rooms
-     :report @report}))
+     :report        @report}))
 
 (defn- build-roster-groups
   "Builds the list of roster group strings for a member based on their :groups.
@@ -294,24 +329,24 @@
                                  []))
 
               ;; Build lookup map: jid -> roster item
-              roster-lookup (into {} (map (fn [item] [(:jid item) item]) current-roster))]
+              roster-lookup  (into {} (map (fn [item] [(:jid item) item]) current-roster))]
 
           ;; Build target roster - all other managed users
           (doseq [member-b members
-                  :when (not= (:user-id member-b) user-a)]
-            (let [user-b (:user-id member-b)
-                  jid-b (str user-b "@" xmpp-domain)
-                  nick-b (:name member-b)
-                  groups-b (vec (build-roster-groups (:groups member-b) groups))
+                  :when    (not= (:user-id member-b) user-a)]
+            (let [user-b          (:user-id member-b)
+                  jid-b           (str user-b "@" xmpp-domain)
+                  nick-b          (:name member-b)
+                  groups-b        (vec (build-roster-groups (:groups member-b) groups))
 
                   ;; Check if roster item exists with correct values
-                  existing-item (get roster-lookup jid-b)
+                  existing-item   (get roster-lookup jid-b)
                   existing-groups (set (:groups existing-item))
-                  target-groups (set groups-b)
+                  target-groups   (set groups-b)
 
-                  needs-update? (or (nil? existing-item)
-                                    (not= existing-groups target-groups)
-                                    (not= (:nick existing-item) nick-b))]
+                  needs-update?   (or (nil? existing-item)
+                                      (not= existing-groups target-groups)
+                                      (not= (:nick existing-item) nick-b))]
 
               ;; Only update if something changed
               (when needs-update?
@@ -325,11 +360,11 @@
                                       groups-b
                                       "both")
                   (swap! report conj
-                         {:action :roster-updated
-                          :user user-a
-                          :contact user-b
-                          :groups groups-b
-                          :was-new? (nil? existing-item)})
+                    {:action   :roster-updated
+                     :user     user-a
+                     :contact  user-b
+                     :groups   groups-b
+                     :was-new? (nil? existing-item)})
                   (catch Exception e
                     (tel/log! :warn
                               ["Failed to update roster item"
@@ -347,12 +382,12 @@
     (= current-affiliation new-affiliation) nil
 
     :let [room-url (str room-id "@" muc-service)
-          message (case new-affiliation
-                    "owner" (str "You have been added to room '" room-name "' as an owner.\nJoin at: " room-url)
-                    "admin" (str "You have been added to room '" room-name "' as an admin.\nJoin at: " room-url)
-                    "member" (str "You have been added to room '" room-name "' as a member.\nJoin at: " room-url)
-                    "none" (str "You have been removed from room '" room-name "'.")
-                    nil)]
+          message  (case new-affiliation
+                     "owner"  (str "You have been added to room '" room-name "' as an owner.\nJoin at: " room-url)
+                     "admin"  (str "You have been added to room '" room-name "' as an admin.\nJoin at: " room-url)
+                     "member" (str "You have been added to room '" room-name "' as a member.\nJoin at: " room-url)
+                     "none"   (str "You have been removed from room '" room-name "'.")
+                     nil)]
 
     (not message) nil
 
@@ -379,9 +414,9 @@
    Accepts pre-fetched room-affiliations-map to avoid redundant API calls."
   [ejabberd-api rooms members xmpp-domain muc-service admin-bot room-affiliations-map]
   (let [report (atom [])]
-    (doseq [room rooms
+    (doseq [room  rooms
             :when (:room-id room)]
-      (let [room-id (:room-id room)
+      (let [room-id   (:room-id room)
             room-name (:name room)]
         (tel/log! :debug ["Syncing affiliations for room" {:room-id room-id}])
 
@@ -390,13 +425,13 @@
 
           ;; For each managed member, compute and set affiliation if changed
           (doseq [member members]
-            (let [user-id (:user-id member)
-                  user-groups (:groups member)
-                  target-affiliation (room-membership/compute-room-affiliation user-groups
-                                                                               (:admins room)
-                                                                               (:members room))
+            (let [user-id             (:user-id member)
+                  user-groups         (:groups member)
+                  target-affiliation  (room-membership/compute-room-affiliation user-groups
+                                                                                (:admins room)
+                                                                                (:members room))
                   current-affiliation (get current-affiliations user-id "none")
-                  needs-update? (not= current-affiliation target-affiliation)]
+                  needs-update?       (not= current-affiliation target-affiliation)]
 
               ;; Only make API call if affiliation needs to change
               (if needs-update?
@@ -419,25 +454,25 @@
                                         target-affiliation))
 
                   (swap! report conj
-                         {:action :affiliation-updated
-                          :room room-id
-                          :user user-id
-                          :old-affiliation current-affiliation
-                          :new-affiliation target-affiliation})
+                    {:action          :affiliation-updated
+                     :room            room-id
+                     :user            user-id
+                     :old-affiliation current-affiliation
+                     :new-affiliation target-affiliation})
                   (catch Exception e
                     (tel/log! :warn
                               ["Failed to set room affiliation"
-                               {:room room-id
-                                :user user-id
+                               {:room        room-id
+                                :user        user-id
                                 :affiliation target-affiliation
-                                :error (ex-message e)}])))
+                                :error       (ex-message e)}])))
 
                 ;; Affiliation already correct, no API call needed
                 (swap! report conj
-                       {:action :affiliation-unchanged
-                        :room room-id
-                        :user user-id
-                        :affiliation current-affiliation})))))))
+                  {:action      :affiliation-unchanged
+                   :room        room-id
+                   :user        user-id
+                   :affiliation current-affiliation})))))))
     @report))
 
 (defn- sync-bookmarks
@@ -447,48 +482,59 @@
    member, admin, or owner affiliation. Rooms with 'none' or 'outcast'
    affiliation are not bookmarked.
    
-   Bookmarks use the user's user-id as the nickname and default to autojoin=true.
+   Bookmarks use the user's :name as the nickname and default to autojoin=true.
    
-   OPTIMIZATION: Only calls set-user-bookmarks when bookmark list has changed."
-  [ejabberd-api members rooms xmpp-domain muc-service room-affiliations-map]
+   OPTIMIZATION: Only calls set-user-bookmarks when bookmark list has changed.
+   SAFETY: Skips fetching existing bookmarks for newly registered users (they have none)."
+  [ejabberd-api members rooms xmpp-domain muc-service room-affiliations-map newly-registered-users]
   (let [report (atom [])]
     (doseq [member members]
-      (let [user-id (:user-id member)]
-        (tel/log! :debug ["Syncing bookmarks for" {:user user-id}])
+      (let [user-id           (:user-id member)
+            newly-registered? (contains? newly-registered-users user-id)]
+        (tel/log! :debug ["Syncing bookmarks for" {:user user-id :newly-registered? newly-registered?}])
 
         (try
           ;; Build target bookmark list
           (let [target-bookmarks
                 (vec
                  (for [[room-id affiliations] room-affiliations-map
-                       :let [room (some #(when (= (:room-id %) room-id) %) rooms)
-                             user-aff (some #(when (str/includes? (:jid %) user-id)
-                                               (:affiliation %))
-                                            affiliations)]
-                       :when (and room
-                                  user-aff
-                                  (not= user-aff "none")
-                                  (not= user-aff "outcast"))]
-                   {:jid (str room-id "@" muc-service)
-                    :name (:name room)
+                       :let                   [room     (some #(when (= (:room-id %) room-id) %) rooms)
+                                               user-aff (some #(when (str/includes? (:jid %) user-id)
+                                                                 (:affiliation %))
+                                                              affiliations)]
+                       :when                  (and room
+                                                   user-aff
+                                                   (not= user-aff "none")
+                                                   (not= user-aff "outcast"))]
+                   {:jid      (str room-id "@" muc-service)
+                    :name     (:name room)
                     :autojoin true
-                    :nick user-id}))
+                    :nick     (:name member)}))
 
-                ;; Get current bookmarks to compare
-                current-bookmarks (try
-                                    (vec (api/get-user-bookmarks ejabberd-api user-id))
-                                    (catch Exception e
-                                      (tel/log! :debug ["No existing bookmarks or error fetching"
-                                                        {:user user-id :error (ex-message e)}])
-                                      []))
+                ;; Get current bookmarks to compare For newly registered users, skip the fetch (returns 500) and
+                ;; assume empty
+                current-bookmarks (if newly-registered?
+                                    (do
+                                      (tel/log! :debug
+                                                ["Skipping bookmark fetch for newly registered user"
+                                                 {:user user-id}])
+                                      [])
+                                    (try
+                                      (vec (api/get-user-bookmarks ejabberd-api user-id))
+                                      (catch Exception e
+                                        (tel/log! :debug
+                                                  ["No existing bookmarks or error fetching"
+                                                   {:user user-id :error (ex-message e)}])
+                                        [])))
 
                 ;; Normalize for comparison (sort by jid, keep only relevant fields)
                 normalize-bookmarks (fn [bms]
-                                      (sort-by :jid (map (fn [bm]
-                                                           (-> bm
-                                                               (select-keys [:jid :name :autojoin :nick])
-                                                               (update :autojoin #(if (= % "false") false true))))
-                                                         bms)))
+                                      (sort-by :jid
+                                               (map (fn [bm]
+                                                      (-> bm
+                                                          (select-keys [:jid :name :autojoin :nick])
+                                                          (update :autojoin #(if (= % "false") false true))))
+                                                    bms)))
 
                 current-normalized (normalize-bookmarks current-bookmarks)
                 target-normalized (normalize-bookmarks target-bookmarks)
@@ -500,37 +546,37 @@
               (do
                 (api/set-user-bookmarks ejabberd-api user-id target-bookmarks)
                 (swap! report conj
-                       {:action :bookmarks-updated
-                        :user user-id
-                        :bookmark-count (count target-bookmarks)
-                        :was-empty? (empty? current-bookmarks)}))
+                  {:action         :bookmarks-updated
+                   :user           user-id
+                   :bookmark-count (count target-bookmarks)
+                   :was-empty?     (empty? current-bookmarks)}))
 
               (swap! report conj
-                     {:action :bookmarks-unchanged
-                      :user user-id
-                      :bookmark-count (count target-bookmarks)})))
+                {:action         :bookmarks-unchanged
+                 :user           user-id
+                 :bookmark-count (count target-bookmarks)})))
 
           (catch Exception e
             (tel/log! :warn
                       ["Failed to sync bookmarks"
                        {:user user-id :error (ex-message e)}])
             (swap! report conj
-                   {:action :bookmark-sync-failed
-                    :user user-id
-                    :error (ex-message e)})))))
+              {:action :bookmark-sync-failed
+               :user   user-id
+               :error  (ex-message e)})))))
     @report))
 
 (defn- update-tracking-state
   "Updates :do-not-edit-state in the state map to reflect current managed entities."
   [state]
   (let [managed-members (set (map :user-id (:members state)))
-        managed-rooms (set (keep :room-id (:rooms state)))
-        managed-groups (set (keys (:groups state)))]
+        managed-rooms   (set (keep :room-id (:rooms state)))
+        managed-groups  (set (keys (:groups state)))]
     (assoc state
            :do-not-edit-state
            {:managed-members managed-members
-            :managed-rooms managed-rooms
-            :managed-groups managed-groups})))
+            :managed-rooms   managed-rooms
+            :managed-groups  managed-groups})))
 
 (defn sync-state!
   "Synchronizes ejabberd state with the declarative configuration.
@@ -588,28 +634,29 @@
             (let [managed-rooms (get-in old-tracking [:managed-rooms] #{})
                   managed-users (get-in old-tracking [:managed-members] #{})]
               (swap! all-reports concat
-                     (delete-users ejabberd-api
-                                   (:users-to-delete diffs)
-                                   managed-rooms
-                                   managed-users
-                                   xmpp-domain))))
+                (delete-users ejabberd-api
+                              (:users-to-delete diffs)
+                              managed-rooms
+                              managed-users
+                              xmpp-domain))))
 
         _ (when (seq (:rooms-to-delete diffs))
             (let [managed-users (get-in old-tracking [:managed-members] #{})]
               (swap! all-reports concat
-                     (delete-rooms ejabberd-api
-                                   (:rooms-to-delete diffs)
-                                   managed-users
-                                   xmpp-domain
-                                   muc-service))))
+                (delete-rooms ejabberd-api
+                              (:rooms-to-delete diffs)
+                              managed-users
+                              xmpp-domain
+                              muc-service))))
 
         ;; Phase 3: Register users
-        _ (when (seq (:users-to-add diffs))
+        newly-registered-users (set (:users-to-add diffs))
+        _ (when (seq newly-registered-users)
             (swap! all-reports concat
-                   (register-users ejabberd-api
-                                   (:users-to-add diffs)
-                                   (:env component)
-                                   (:default-test-password component))))
+              (register-users ejabberd-api
+                              newly-registered-users
+                              (:env component)
+                              (:default-test-password component))))
 
         ;; Phase 4: Create rooms (returns updated state)
         rooms-result (create-rooms ejabberd-api
@@ -622,34 +669,29 @@
 
         ;; Phase 5: Sync rosters
         _ (swap! all-reports concat
-                 (sync-rosters ejabberd-api
-                               (:members working-state)
-                               (:groups working-state)
-                               xmpp-domain))
+            (sync-rosters ejabberd-api
+                          (:members working-state)
+                          (:groups working-state)
+                          xmpp-domain))
 
-        ;; Phase 5.5: Fetch room affiliations ONCE for both phases 6 and 7
-        ;; Store in two formats to avoid redundant API calls
-        room-affiliations-raw
-        (into {}
-              (for [room (:rooms working-state)
-                    :when (:room-id room)
-                    :let [room-id (:room-id room)
-                          affs (try
-                                 (api/get-room-affiliations ejabberd-api room-id muc-service)
-                                 (catch Exception e
-                                   (tel/log! :warn ["Failed to get room affiliations"
-                                                    {:room room-id :error (ex-message e)}])
-                                   []))]]
-                [room-id affs]))
-
-        ;; Transform for sync-affiliations: room-id -> {username -> affiliation-string}
+        ;; Phase 5.5: Fetch room affiliations for sync-affiliations
+        ;; Transform: room-id -> {username -> affiliation-string}
         room-affiliations-map
         (into {}
-              (for [[room-id affs] room-affiliations-raw]
+              (for [room  (:rooms working-state)
+                    :when (:room-id room)
+                    :let  [room-id (:room-id room)
+                           affs    (try
+                                     (api/get-room-affiliations ejabberd-api room-id muc-service)
+                                     (catch Exception e
+                                       (tel/log! :warn
+                                                 ["Failed to get room affiliations"
+                                                  {:room room-id :error (ex-message e)}])
+                                       []))]]
                 [room-id
                  (into {}
                        (map (fn [aff]
-                              (let [jid-str (:jid aff)
+                              (let [jid-str  (:jid aff)
                                     ^Jid jid (JidCreate/from ^CharSequence jid-str)
                                     username (str (.getLocalpartOrNull jid))]
                                 [username (:affiliation aff)]))
@@ -657,22 +699,38 @@
 
         ;; Phase 6: Sync affiliations
         _ (swap! all-reports concat
-                 (sync-affiliations ejabberd-api
-                                    (:rooms working-state)
-                                    (:members working-state)
-                                    xmpp-domain
-                                    muc-service
-                                    (:admin-bot component)
-                                    room-affiliations-map))
+            (sync-affiliations ejabberd-api
+                               (:rooms working-state)
+                               (:members working-state)
+                               xmpp-domain
+                               muc-service
+                               (:admin-bot component)
+                               room-affiliations-map))
 
-        ;; Phase 7: Sync bookmarks (uses raw affiliations list)
+        ;; Phase 6.5: Fetch UPDATED room affiliations for bookmarks (after affiliation sync)
+        room-affiliations-raw
+        (into {}
+              (for [room  (:rooms working-state)
+                    :when (:room-id room)
+                    :let  [room-id (:room-id room)
+                           affs    (try
+                                     (api/get-room-affiliations ejabberd-api room-id muc-service)
+                                     (catch Exception e
+                                       (tel/log! :warn
+                                                 ["Failed to get room affiliations for bookmarks"
+                                                  {:room room-id :error (ex-message e)}])
+                                       []))]]
+                [room-id affs]))
+
+        ;; Phase 7: Sync bookmarks (uses fresh affiliations from after sync)
         _ (swap! all-reports concat
-                 (sync-bookmarks ejabberd-api
-                                 (:members working-state)
-                                 (:rooms working-state)
-                                 xmpp-domain
-                                 muc-service
-                                 room-affiliations-raw))
+            (sync-bookmarks ejabberd-api
+                            (:members working-state)
+                            (:rooms working-state)
+                            xmpp-domain
+                            muc-service
+                            room-affiliations-raw
+                            newly-registered-users))
 
         ;; Phase 8: Update tracking state
         final-state-with-bot (update-tracking-state working-state)
@@ -685,7 +743,7 @@
 
     (tel/log! :info ["State synchronization complete" {:changes (count @all-reports)}])
 
-    {:state final-state
+    {:state  final-state
      :report @all-reports}))
 
 ;; =============================================================================
@@ -694,7 +752,7 @@
 
 (defn read-lock-state
   [{:keys [user-db]}]
-  (file-db/read-lock-state user-db))
+  (user-db/read-lock-state user-db))
 
 (defn swap-state!
   "Atomically updates the user database by applying a function, validating, and syncing.
@@ -738,7 +796,7 @@
     (try
       (b/cond
         :do (tel/log! :info ["Starting swap-state!" {:reason reason}])
-        :let [current-db (file-db/read-user-db user-db)]
+        :let [current-db (user-db/read-user-db user-db)]
 
         :do (tel/log! :debug ["Applying swap function" {:reason reason}])
         :let [new-db (apply f current-db args)]
@@ -753,14 +811,14 @@
            :errors      (:errors validation-result)
            :error-value (:error-value validation-result)})
 
-        :do (file-db/lock-state! user-db (or reason "swap-state! update") (* sync-timeout-s 1000))
+        :do (user-db/lock-state! user-db (or reason "swap-state! update") (* sync-timeout-s 1000))
         :do (tel/log! :debug ["Validation passed, starting sync" {:reason reason}])
         :let [sync-result  (sync-state! component new-db)
               synced-state (:state sync-result)]
 
         :do (tel/log! :debug ["Sync complete, writing to disk" {:reason reason}])
-        :let [written-db (file-db/write-user-db user-db synced-state)
-              sha        (file-db/compute-current-sha user-db)]
+        :let [written-db (user-db/write-user-db user-db synced-state)
+              sha        (user-db/compute-current-sha user-db)]
 
         :do (reset! !last-written-sync-result-sha sha)
         :do (tel/log! :info ["swap-state! completed successfully" {:reason reason}])
@@ -779,7 +837,7 @@
          :error-value (or (ex-data e) e)})
 
       (finally
-       (file-db/clear-lock! user-db)))))
+       (user-db/clear-lock! user-db)))))
 
 (defn get-last-written-sync-state-sha
   "After swap-state! is invoked, the new userdb.edn is written. The sha of that file is stored here."
@@ -804,14 +862,14 @@
   [component user-id new-password]
   (tel/log! :info ["Updating password" {:user-id user-id}])
 
-  (let [user-db (:user-db component)
-        current-state (file-db/read-user-db user-db)
+  (let [user-db       (:user-db component)
+        current-state (user-db/read-user-db user-db)
         managed-users (set (map :user-id (:members current-state)))]
 
     ;; Verify user is managed
     (when-not (contains? managed-users user-id)
       (throw (ex-info "User is not managed"
-                      {:type :user-not-managed
+                      {:type    :user-not-managed
                        :user-id user-id})))
 
     ;; Update password via API
@@ -819,11 +877,11 @@
       (api/change-password (:ejabberd-api component) user-id new-password)
       (tel/log! :info ["Password updated successfully" {:user-id user-id}])
       {:success? true
-       :message "Password updated successfully"}
+       :message  "Password updated successfully"}
       (catch Exception e
         (tel/log! :error ["Password update failed" {:user-id user-id :error (ex-message e)}])
         {:success? false
-         :message (str "Password update failed: " (ex-message e))}))))
+         :message  (str "Password update failed: " (ex-message e))}))))
 
 ;; =============================================================================
 ;; Integrant Component
@@ -832,13 +890,13 @@
 (defmethod ig/init-key ::sync-state
   [_ {:keys [ejabberd-api user-db admin-bot managed-muc-options env default-test-password sync-timeout-s]}]
   (tel/log! :info ["Initializing sync-state component"])
-  (let [conf {:ejabberd-api ejabberd-api
-              :user-db user-db
-              :admin-bot admin-bot
-              :managed-muc-options managed-muc-options
-              :sync-timeout-s sync-timeout-s
-              :env env
-              :default-test-password default-test-password
+  (let [conf {:ejabberd-api                  ejabberd-api
+              :user-db                       user-db
+              :admin-bot                     admin-bot
+              :managed-muc-options           managed-muc-options
+              :sync-timeout-s                sync-timeout-s
+              :env                           env
+              :default-test-password         default-test-password
               :!last-written-sync-result-sha (atom (user-db/compute-current-sha user-db))}]
     (def testing-conf* conf)
     conf))
@@ -849,8 +907,8 @@
   nil)
 
 (comment
-  (def db (file-db/read-user-db (:user-db testing-conf*)))
+  (def db (user-db/read-user-db (:user-db testing-conf*)))
 
   (def synced-db (sync-state! testing-conf* db))
-  (file-db/write-user-db (:user-db testing-conf*) (:state synced-db)))
+  (user-db/write-user-db (:user-db testing-conf*) (:state synced-db)))
 

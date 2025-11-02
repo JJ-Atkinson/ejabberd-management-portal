@@ -10,7 +10,7 @@
    [ring.middleware.defaults :as ring-defaults]
    [clojure.string :as str])
   (:import
-   [org.eclipse.jetty.server Server]))
+    [org.eclipse.jetty.server Server]))
 
 (set! *warn-on-reflection* true)
 
@@ -29,7 +29,7 @@
   [handler]
   (fn [request]
     (let [response (handler request)
-          uri (:uri request)]
+          uri      (:uri request)]
       (if (and response
                (or (str/starts-with? uri "/js/")
                    (str/starts-with? uri "/css/")))
@@ -47,25 +47,25 @@
               (catch Exception e (tel/error! "Handler error" e)))))
         (ring-defaults/wrap-defaults
          (-> (case env
-               (:dev :test)
-               ring-defaults/site-defaults
-               (:prod)
-               ring-defaults/secure-site-defaults)
+                   (:dev :test)
+                   ring-defaults/site-defaults
+                   (:prod)
+                   ring-defaults/secure-site-defaults)
              (assoc-in [:security :anti-forgery] false)
              (assoc-in [:security :frame-options] :deny)))
         (wrap-static-cache))))
 
 (defmethod ig/init-key ::server
   [_ {:keys [jetty] :as config}]
-  (let [options (merge {:port 3001
-                        :host "0.0.0.0"
-                        :join? false}
-                       jetty)
+  (let [options  (merge {:port  3001
+                         :host  "0.0.0.0"
+                         :join? false}
+                        jetty)
         !handler (atom (handler config))]
     (tel/log! :info ["Starting server " options])
     {:!handler !handler
-     :server (ring-jetty/run-jetty (fn [req] (@!handler req))
-                                   options)}))
+     :server   (ring-jetty/run-jetty (fn [req] (@!handler req))
+                                     options)}))
 
 (defmethod ig/suspend-key! ::server
   [_ _])

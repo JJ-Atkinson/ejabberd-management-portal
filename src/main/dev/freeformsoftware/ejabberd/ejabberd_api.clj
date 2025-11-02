@@ -21,27 +21,32 @@
   "Make an HTTP request to the ejabberd API.
    Returns the parsed response body on success, or throws on error."
   [component endpoint payload]
-  (let [url (str (:admin-api-url component) "/" endpoint)
-        opts {:method :post
-              :url url
-              :headers {"Content-Type" "application/json"}
-              :body (json/generate-string payload)
-              :as :json
-              :throw-exceptions false}
-        response (http/request opts)] 
-    (tel/log! :debug ["API request" {:endpoint endpoint
-                                     :payload payload
-                                     :status (:status response)}])
+  (let [url      (str (:admin-api-url component) "/" endpoint)
+        opts     {:method           :post
+                  :url              url
+                  :headers          {"Content-Type" "application/json"}
+                  :body             (json/generate-string payload)
+                  :as               :json
+                  :throw-exceptions false}
+        response (http/request opts)]
+    (tel/log! :debug
+              ["API request"
+               {:endpoint endpoint
+                :payload  payload
+                :status   (:status response)}])
 
+    (tap> {:req opts :resp response})
     (if (= 200 (:status response))
       (:body response)
       (do
-        (tel/log! :error ["API request failed" {:endpoint endpoint
-                                                :status (:status response)
-                                                :body (:body response)}])
+        (tel/log! :error
+                  ["API request failed"
+                   {:endpoint endpoint
+                    :status   (:status response)
+                    :body     (:body response)}])
         (throw (ex-info "API request failed"
                         {:endpoint endpoint
-                         :status (:status response)
+                         :status   (:status response)
                          :response (:body response)}))))))
 
 ;; =============================================================================
@@ -62,8 +67,8 @@
   [component user password]
   (make-request component
                 "register"
-                {:user user
-                 :host (:xmpp-domain component)
+                {:user     user
+                 :host     (:xmpp-domain component)
                  :password password}))
 
 (defn change-password
@@ -80,8 +85,8 @@
   [component user newpass]
   (make-request component
                 "change_password"
-                {:user user
-                 :host (:xmpp-domain component)
+                {:user    user
+                 :host    (:xmpp-domain component)
                  :newpass newpass}))
 
 (defn registered-users
@@ -135,9 +140,9 @@
   ([component name service]
    (make-request component
                  "create_room"
-                 {:name name
+                 {:name    name
                   :service service
-                  :host (:xmpp-domain component)})))
+                  :host    (:xmpp-domain component)})))
 
 (defn create-room-with-opts
   "Create a MUC room with configuration options.
@@ -172,9 +177,9 @@
    (let [options (map (fn [[k v]] {:name (clojure.core/name k) :value (str v)}) opts)]
      (make-request component
                    "create_room_with_opts"
-                   {:name name
+                   {:name    name
                     :service service
-                    :host (:xmpp-domain component)
+                    :host    (:xmpp-domain component)
                     :options options}))))
 
 (defn muc-online-rooms
@@ -213,10 +218,10 @@
   ([component name user host affiliation service]
    (make-request component
                  "set_room_affiliation"
-                 {:room name
-                  :service service
-                  :user user
-                  :host host
+                 {:room        name
+                  :service     service
+                  :user        user
+                  :host        host
                   :affiliation affiliation})))
 
 (defn get-room-affiliations
@@ -235,7 +240,7 @@
   ([component name service]
    (make-request component
                  "get_room_affiliations"
-                 {:room name
+                 {:room    name
                   :service service})))
 
 (defn get-room-options
@@ -255,7 +260,7 @@
   ([component name service]
    (make-request component
                  "get_room_options"
-                 {:name name
+                 {:name    name
                   :service service})))
 
 (defn destroy-room
@@ -274,7 +279,7 @@
   ([component name service]
    (make-request component
                  "destroy_room"
-                 {:name name
+                 {:name    name
                   :service service})))
 
 ;; =============================================================================
@@ -326,11 +331,11 @@
                 "add_rosteritem"
                 {:localuser localuser
                  :localhost localhost
-                 :user user
-                 :host host
-                 :nick nick
-                 :groups groups
-                 :subs subs}))
+                 :user      user
+                 :host      host
+                 :nick      nick
+                 :groups    groups
+                 :subs      subs}))
 
 (defn delete-rosteritem
   "Delete a contact from a user's roster (contact list).
@@ -354,8 +359,8 @@
                 "delete_rosteritem"
                 {:localuser localuser
                  :localhost localhost
-                 :user user
-                 :host host}))
+                 :user      user
+                 :host      host}))
 
 ;; =============================================================================
 ;; Bookmark Management (XEP-0048)
@@ -393,19 +398,32 @@
   [bookmarks]
   (let [conferences
         (for [bm bookmarks]
-          (let [jid (escape-xml-attr (:jid bm))
-                name (escape-xml-attr (:name bm))
+          (let [jid      (escape-xml-attr (:jid bm))
+                name     (escape-xml-attr (:name bm))
                 autojoin (if (false? (:autojoin bm)) "false" "true")
-                nick (:nick bm)]
+                nick     (:nick bm)]
             (if nick
-              (str "<conference jid=\"" jid "\" "
-                   "autojoin=\"" autojoin "\" "
-                   "name=\"" name "\">"
-                   "<nick>" (escape-xml-attr nick) "</nick>"
+              (str "<conference jid=\""
+                   jid
+                   "\" "
+                   "autojoin=\""
+                   autojoin
+                   "\" "
+                   "name=\""
+                   name
+                   "\">"
+                   "<nick>" (escape-xml-attr nick)
+                   "</nick>"
                    "</conference>")
-              (str "<conference jid=\"" jid "\" "
-                   "autojoin=\"" autojoin "\" "
-                   "name=\"" name "\"/>"))))]
+              (str "<conference jid=\""
+                   jid
+                   "\" "
+                   "autojoin=\""
+                   autojoin
+                   "\" "
+                   "name=\""
+                   name
+                   "\"/>"))))]
     (str "<storage xmlns=\"storage:bookmarks\">"
          (apply str conferences)
          "</storage>")))
@@ -458,14 +476,15 @@
                          :nick \"Alice\"}])"
   [component user bookmarks]
   (let [bookmarks-xml (build-bookmark-xml bookmarks)]
-    (tel/log! :debug ["Setting user bookmarks"
-                      {:user user
-                       :bookmark-count (count bookmarks)
-                       :xml bookmarks-xml}])
+    (tel/log! :debug
+              ["Setting user bookmarks"
+               {:user           user
+                :bookmark-count (count bookmarks)
+                :xml            bookmarks-xml}])
     (make-request component
                   "set_user_bookmarks"
-                  {:user user
-                   :host (:xmpp-domain component)
+                  {:user          user
+                   :host          (:xmpp-domain component)
                    :bookmarks_xml bookmarks-xml})))
 
 ;; =============================================================================
@@ -474,13 +493,14 @@
 
 (defmethod ig/init-key ::ejabberd-api
   [_ {:keys [admin-api-url xmpp-domain muc-service]}]
-  (tel/log! :info ["Initializing ejabberd-api component"
-                   {:admin-api-url admin-api-url
-                    :xmpp-domain xmpp-domain
-                    :muc-service muc-service}])
+  (tel/log! :info
+            ["Initializing ejabberd-api component"
+             {:admin-api-url admin-api-url
+              :xmpp-domain   xmpp-domain
+              :muc-service   muc-service}])
   (let [conf {:admin-api-url admin-api-url
-              :xmpp-domain xmpp-domain
-              :muc-service muc-service}]
+              :xmpp-domain   xmpp-domain
+              :muc-service   muc-service}]
     (def testing-conf* conf)
     conf))
 
@@ -494,8 +514,7 @@
 
 (comment
   ;; Initialize a test component manually
-  ;; =============================================================================
-  ;; User Management Tests
+  ;; =============================================================================. User Management Tests
   ;; =============================================================================
 
   ;; List all registered users
@@ -508,8 +527,7 @@
   (change-password testing-conf* "testuser" "newpass456")
 
   ;; =============================================================================
-  ;; MUC Room Management Tests
-  ;; =============================================================================
+  ;; MUC Room Management Tests =============================================================================
 
   ;; List all MUC rooms (using default service)
   (muc-online-rooms testing-conf*)
@@ -544,8 +562,7 @@
                         "alice@yourserverhere.org"
                         "none")
 
-  ;; =============================================================================
-  ;; Roster Management Tests
+  ;; =============================================================================. Roster Management Tests
   ;; =============================================================================
 
   ;; Get roster for a user
@@ -568,8 +585,7 @@
                      "alice"
                      "yourserverhere.org")
 
-  ;; =============================================================================
-  ;; Full Workflow Example
+  ;; =============================================================================. Full Workflow Example
   ;; =============================================================================
 
   ;; Complete workflow: create users, room, and add users to room
@@ -614,15 +630,14 @@
 
     ;; Check the results
     {:room-affiliations (get-room-affiliations testing-conf* "team-chat")
-     :alice-roster (get-roster testing-conf* "alice")
-     :bob-roster (get-roster testing-conf* "bob")})
+     :alice-roster      (get-roster testing-conf* "alice")
+     :bob-roster        (get-roster testing-conf* "bob")})
 
-  ;; =============================================================================
-  ;; Utility: Delete All Rooms
+  ;; =============================================================================. Utility: Delete All Rooms
   ;; =============================================================================
 
   ;; Delete all discovered rooms from the server
-  (let [all-rooms (muc-online-rooms testing-conf*)
+  (let [all-rooms  (muc-online-rooms testing-conf*)
         room-names (map #(first (clojure.string/split % #"@")) all-rooms)]
     (doseq [room-name room-names]
       (println "Deleting room:" room-name)

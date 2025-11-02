@@ -14,6 +14,6 @@
               (merge acc rts)))
           routes))
 
-(defn wrap-routes 
+(defn wrap-routes
   [wrap-fn routes]
   (update-vals routes wrap-fn))

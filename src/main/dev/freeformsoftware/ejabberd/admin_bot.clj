@@ -21,22 +21,23 @@
    [integrant.core :as ig]
    [taoensso.telemere :as tel])
   (:import
-   [org.jivesoftware.smack AbstractXMPPConnection ConnectionListener ReconnectionManager ReconnectionManager$ReconnectionPolicy]
-   [org.jivesoftware.smack.packet Stanza Message]
-   [org.jivesoftware.smack.tcp XMPPTCPConnection XMPPTCPConnectionConfiguration XMPPTCPConnectionConfiguration$Builder]
-   [org.jivesoftware.smack.chat2 ChatManager Chat IncomingChatMessageListener]
-   [org.jivesoftware.smack MessageListener]
-   [org.jivesoftware.smackx.muc MultiUserChat MultiUserChatManager]
-   [org.jivesoftware.smackx.omemo OmemoManager OmemoConfiguration OmemoMessage$Received]
-   [org.jivesoftware.smackx.omemo.signal SignalOmemoService SignalFileBasedOmemoStore SignalCachingOmemoStore]
-   [org.jivesoftware.smackx.omemo.listener OmemoMessageListener]
-   [org.jivesoftware.smackx.omemo.trust OmemoFingerprint TrustState OmemoTrustCallback]
-   [org.jivesoftware.smackx.omemo.internal OmemoDevice]
-   [org.jivesoftware.smackx.carbons.packet CarbonExtension$Direction]
-   [org.jxmpp.jid EntityBareJid]
-   [org.jxmpp.jid.parts Domainpart Localpart Resourcepart]
-   [org.jxmpp.jid.impl JidCreate]
-   [java.io File]))
+    [org.jivesoftware.smack AbstractXMPPConnection ConnectionListener ReconnectionManager
+     ReconnectionManager$ReconnectionPolicy]
+    [org.jivesoftware.smack.packet Stanza Message]
+    [org.jivesoftware.smack.tcp XMPPTCPConnection XMPPTCPConnectionConfiguration XMPPTCPConnectionConfiguration$Builder]
+    [org.jivesoftware.smack.chat2 ChatManager Chat IncomingChatMessageListener]
+    [org.jivesoftware.smack MessageListener]
+    [org.jivesoftware.smackx.muc MultiUserChat MultiUserChatManager]
+    [org.jivesoftware.smackx.omemo OmemoManager OmemoConfiguration OmemoMessage$Received]
+    [org.jivesoftware.smackx.omemo.signal SignalOmemoService SignalFileBasedOmemoStore SignalCachingOmemoStore]
+    [org.jivesoftware.smackx.omemo.listener OmemoMessageListener]
+    [org.jivesoftware.smackx.omemo.trust OmemoFingerprint TrustState OmemoTrustCallback]
+    [org.jivesoftware.smackx.omemo.internal OmemoDevice]
+    [org.jivesoftware.smackx.carbons.packet CarbonExtension$Direction]
+    [org.jxmpp.jid EntityBareJid]
+    [org.jxmpp.jid.parts Domainpart Localpart Resourcepart]
+    [org.jxmpp.jid.impl JidCreate]
+    [java.io File]))
 
 (set! *warn-on-reflection* true)
 
@@ -47,7 +48,7 @@
 (def member-admin-bot
   "Virtual member definition for the admin bot.
    This is ghost-included in sync-state to ensure the bot appears in all rooms and rosters."
-  {:name "Admin Bot"
+  {:name    "Admin Bot"
    :user-id "admin"})
 
 ;; =============================================================================
@@ -73,39 +74,41 @@
       (.login connection)
       (tel/log! :info
                 ["XMPP connection established"
-                 {:user (str (.getUser connection))
-                  :connected (.isConnected connection)
+                 {:user          (str (.getUser connection))
+                  :connected     (.isConnected connection)
                   :authenticated (.isAuthenticated connection)}])
       connection
       (catch org.jivesoftware.smack.sasl.SASLErrorException e
         ;; Authentication failure (wrong password, policy violation, etc.)
         (let [sasl-failure (.getSASLFailure e)
-              condition (str sasl-failure)]
-          (tel/log! :error ["XMPP authentication failed"
-                            {:user username
-                             :host host
-                             :error-condition condition
-                             :error-text (.getMessage e)}])
+              condition    (str sasl-failure)]
+          (tel/log! :error
+                    ["XMPP authentication failed"
+                     {:user            username
+                      :host            host
+                      :error-condition condition
+                      :error-text      (.getMessage e)}])
           (throw (ex-info "XMPP authentication failed"
-                          {:type :authentication-failure
-                           :username username
+                          {:type      :authentication-failure
+                           :username  username
                            :condition condition}
                           e))))
       (catch org.jivesoftware.smack.XMPPException$StreamErrorException e
         ;; Stream error (policy-violation for IP bans, etc.)
-        (let [stream-error (.getStreamError e)
-              condition (str (.getCondition stream-error))
+        (let [stream-error     (.getStreamError e)
+              condition        (str (.getCondition stream-error))
               descriptive-text (.getDescriptiveText stream-error)]
-          (tel/log! :error ["XMPP stream error"
-                            {:user username
-                             :host host
-                             :condition condition
-                             :text descriptive-text}])
+          (tel/log! :error
+                    ["XMPP stream error"
+                     {:user      username
+                      :host      host
+                      :condition condition
+                      :text      descriptive-text}])
           (throw (ex-info "XMPP stream error"
-                          {:type :stream-error
+                          {:type      :stream-error
                            :condition condition
-                           :text descriptive-text
-                           :ip-ban? (= "policy-violation" condition)}
+                           :text      descriptive-text
+                           :ip-ban?   (= "policy-violation" condition)}
                           e))))
       (catch Exception e
         ;; Other connection errors
@@ -125,12 +128,13 @@
     ;; Configure file-based store (wrapped in caching store for performance)
     (let [omemo-store-path (fs/path db-folder "omemo")]
       (fs/create-dirs omemo-store-path)
-      (let [file-store (SignalFileBasedOmemoStore. (fs/file omemo-store-path))
+      (let [file-store    (SignalFileBasedOmemoStore. (fs/file omemo-store-path))
             caching-store (SignalCachingOmemoStore. file-store)
-            service (SignalOmemoService/getInstance)]
+            service       (SignalOmemoService/getInstance)]
         (.setOmemoStoreBackend service caching-store)
-        (tel/log! :info ["OMEMO service initialized with file-based store"
-                         {:path (str omemo-store-path)}])))
+        (tel/log! :info
+                  ["OMEMO service initialized with file-based store"
+                   {:path (str omemo-store-path)}])))
     (catch Exception e
       (tel/log! :warn ["OMEMO service initialization issue" {:error (ex-message e)}]))))
 
@@ -152,29 +156,32 @@
    
    Returns the listener instance."
   [^AbstractXMPPConnection connection !conf]
-  (let [listener (reify ConnectionListener
-                   (connected [_this _connection]
-                     (tel/log! :info ["XMPP connection established"]))
+  (let [listener (reify
+                  ConnectionListener
+                    (connected [_this _connection]
+                      (tel/log! :info ["XMPP connection established"]))
 
-                   (authenticated [_this _connection resumed]
-                     (tel/log! :info ["XMPP authenticated" {:resumed resumed}])
-                     ;; After successful reconnection, rejoin all rooms
-                     (when resumed
-                       (tel/log! :info ["Reconnection detected - rejoining rooms"])
-                       (try
-                         (when-let [conf @!conf]
-                           (join-all-rooms conf))
-                         (catch Exception e
-                           (tel/log! :error ["Failed to rejoin rooms after reconnection"
-                                             {:error (ex-message e)}])))))
+                    (authenticated [_this _connection resumed]
+                      (tel/log! :info ["XMPP authenticated" {:resumed resumed}])
+                      ;; After successful reconnection, rejoin all rooms
+                      (when resumed
+                        (tel/log! :info ["Reconnection detected - rejoining rooms"])
+                        (try
+                          (when-let [conf @!conf]
+                            (join-all-rooms conf))
+                          (catch Exception e
+                            (tel/log! :error
+                                      ["Failed to rejoin rooms after reconnection"
+                                       {:error (ex-message e)}])))))
 
-                   (connectionClosed [_this]
-                     (tel/log! :warn ["XMPP connection closed normally"]))
+                    (connectionClosed [_this]
+                      (tel/log! :warn ["XMPP connection closed normally"]))
 
-                   (connectionClosedOnError [_this e]
-                     (tel/log! :error ["XMPP connection closed due to error"
-                                       {:error (ex-message e)
-                                        :type (type e)}])))]
+                    (connectionClosedOnError [_this e]
+                      (tel/log! :error
+                                ["XMPP connection closed due to error"
+                                 {:error (ex-message e)
+                                  :type  (type e)}])))]
     (.addConnectionListener connection listener)
 
     ;; Enable automatic reconnection
@@ -195,26 +202,31 @@
    This will generate OMEMO keys if they don't exist, making the device visible to other clients."
   [^AbstractXMPPConnection connection]
   (try
-    (let [omemo-manager (OmemoManager/getInstanceFor connection)
+    (let [omemo-manager  (OmemoManager/getInstanceFor connection)
 
           ;; Setup TOFU trust callback BEFORE initializing
-          trust-callback (reify OmemoTrustCallback
-                           (^TrustState getTrust [this ^OmemoDevice device ^OmemoFingerprint fingerprint]
-                             ;; Always trust on first use
-                             TrustState/trusted)
+          trust-callback (reify
+                          OmemoTrustCallback
+                            (^TrustState getTrust
+                              [this ^OmemoDevice device ^OmemoFingerprint fingerprint]
+                              ;; Always trust on first use
+                              TrustState/trusted)
 
-                           (^void setTrust [this ^OmemoDevice device ^OmemoFingerprint fingerprint ^TrustState state]
-                             ;; Log trust decisions
-                             (tel/log! :debug ["OMEMO trust decision"
-                                               {:device (str device)
-                                                :fingerprint (str fingerprint)
-                                                :state (str state)}])))]
+                            (^void setTrust
+                              [this ^OmemoDevice device ^OmemoFingerprint fingerprint ^TrustState state]
+                              ;; Log trust decisions
+                              (tel/log! :debug
+                                        ["OMEMO trust decision"
+                                         {:device      (str device)
+                                          :fingerprint (str fingerprint)
+                                          :state       (str state)}])))]
 
       (.setTrustCallback omemo-manager trust-callback)
       (tel/log! :info ["Initializing OMEMO manager with TOFU trust strategy..."])
       (.initialize omemo-manager) ;; Generate keys and register device
-      (tel/log! :info ["OMEMO manager initialized"
-                       {:device-id (.getDeviceId omemo-manager)}])
+      (tel/log! :info
+                ["OMEMO manager initialized"
+                 {:device-id (.getDeviceId omemo-manager)}])
       omemo-manager)
     (catch Exception e
       (tel/log! :error ["Failed to create/initialize OmemoManager" {:error (ex-message e)}])
@@ -240,20 +252,22 @@
    (if omemo-manager
      (try
        (let [encrypted-message (.encrypt omemo-manager jid message)
-             ;; In SMACK 4.4.x, use buildMessage with StanzaFactory
-             ;; getStanzaFactory().buildMessageStanza() returns a MessageBuilder
-             message-builder (-> conn .getStanzaFactory .buildMessageStanza)
-             stanza (.buildMessage encrypted-message message-builder jid)]
+             ;; In SMACK 4.4.x, use buildMessage with StanzaFactory getStanzaFactory().buildMessageStanza() returns
+             ;; a MessageBuilder
+             message-builder   (-> conn
+                                   .getStanzaFactory
+                                   .buildMessageStanza)
+             stanza            (.buildMessage encrypted-message message-builder jid)]
          (.sendStanza conn stanza)
          (tel/log! :debug ["Sent OMEMO encrypted DM" {:to (str jid)}]))
        (catch Exception e
          (tel/log! :warn ["Failed to send OMEMO encrypted message, falling back to plaintext" {:error (ex-message e)}])
          (let [chat-manager (get-chat-manager conn)
-               ^Chat chat (.chatWith chat-manager jid)]
+               ^Chat chat   (.chatWith chat-manager jid)]
            (.send chat message))))
      ;; No OMEMO manager, send plaintext
      (let [chat-manager (get-chat-manager conn)
-           ^Chat chat (.chatWith chat-manager jid)]
+           ^Chat chat   (.chatWith chat-manager jid)]
        (.send chat message)))))
 
 (defn- send-muc-message!
@@ -267,7 +281,7 @@
   ([^AbstractXMPPConnection conn ^EntityBareJid jid ^String message ^OmemoManager omemo-manager]
    ;; Temporarily disabled - MUC OMEMO encryption causes connection timeouts
    ;; TODO: Investigate why OMEMO device list queries to MUC rooms timeout
-   #_(let [muc-manager (get-muc-manager conn)
+   #_(let [muc-manager        (get-muc-manager conn)
            ^MultiUserChat muc (.getMultiUserChat muc-manager jid)]
        (.sendMessage muc message))))
 
@@ -281,18 +295,18 @@
    - :service - Either :dm (for users) or :muc (for rooms)"
   [{:keys [xmpp-domain muc-service] :as conf} ^EntityBareJid jid-ent]
   (let [jid-domain (str (.asDomainBareJid jid-ent))
-        service (cond
-                  (= jid-domain xmpp-domain)
-                  :dm
-                  (= jid-domain muc-service)
-                  :muc
-                  :else
-                  (throw (ex-info "The bot is trying to communicate with a foreign entity!"
-                                  {:ent jid-ent})))]
-    {:bare-jid (str (.asBareJid jid-ent))
+        service    (cond
+                     (= jid-domain xmpp-domain)
+                     :dm
+                     (= jid-domain muc-service)
+                     :muc
+                     :else
+                     (throw (ex-info "The bot is trying to communicate with a foreign entity!"
+                                     {:ent jid-ent})))]
+    {:bare-jid   (str (.asBareJid jid-ent))
      :local-part (str (.getLocalpartOrNull jid-ent))
-     :domain jid-domain
-     :service service}))
+     :domain     jid-domain
+     :service    service}))
 
 (defn construct-jid
   "Constructs a JID for either a user (DM) or a room (MUC).
@@ -306,7 +320,7 @@
   {:pre [(string? local-part)
          (#{:dm :muc} service)]}
   (let [domain (case service
-                 :dm xmpp-domain
+                 :dm  xmpp-domain
                  :muc muc-service)]
     (JidCreate/entityBareFrom
      (Localpart/from local-part)
@@ -328,7 +342,7 @@
   (when-not (= (:local-part jid-params) (:user-id member-admin-bot))
     (let [jid (construct-jid conf jid-params)]
       (case (:service jid-params)
-        :dm (send-dm! connection jid message-str omemo-manager)
+        :dm  (send-dm! connection jid message-str omemo-manager)
         :muc (send-muc-message! connection jid message-str omemo-manager)))))
 
 (defn- handle-dm!
@@ -350,22 +364,26 @@
   [^OmemoManager omemo-manager conf]
   (when omemo-manager
     (try
-      (let [listener (reify OmemoMessageListener
-                       (^void onOmemoMessageReceived [this ^Stanza stanza ^OmemoMessage$Received omemo-message]
-                         (tel/log! :info ["Received OMEMO encrypted message"])
-                         (try
-                           (let [from (.getFrom stanza)
-                                 decrypted-body (.getBody omemo-message)]
-                             (handle-dm! conf (breakup-jid conf from) decrypted-body))
-                           (catch Exception e
-                             (tel/log! :error ["Error handling OMEMO message" {:error (ex-message e)}]))))
+      (let [listener (reify
+                      OmemoMessageListener
+                        (^void onOmemoMessageReceived
+                          [this ^Stanza stanza ^OmemoMessage$Received omemo-message]
+                          (tel/log! :info ["Received OMEMO encrypted message"])
+                          (try
+                            (let [from           (.getFrom stanza)
+                                  decrypted-body (.getBody omemo-message)]
+                              (handle-dm! conf (breakup-jid conf from) decrypted-body))
+                            (catch Exception e
+                              (tel/log! :error ["Error handling OMEMO message" {:error (ex-message e)}]))))
 
-                       (^void onOmemoCarbonCopyReceived [this ^CarbonExtension$Direction direction
-                                                         ^Message carbon-copy ^Message wrapping-message
-                                                         ^OmemoMessage$Received omemo-message]
-                         (tel/log! :debug ["Received OMEMO carbon copy"
-                                           {:direction (str direction)
-                                            :body (.getBody omemo-message)}])))]
+                        (^void onOmemoCarbonCopyReceived
+                          [this ^CarbonExtension$Direction direction
+                           ^Message carbon-copy ^Message wrapping-message
+                           ^OmemoMessage$Received omemo-message]
+                          (tel/log! :debug
+                                    ["Received OMEMO carbon copy"
+                                     {:direction (str direction)
+                                      :body      (.getBody omemo-message)}])))]
         (.addOmemoMessageListener omemo-manager listener)
         (tel/log! :info ["OMEMO message listener registered"])
         listener)
@@ -379,10 +397,10 @@
    Returns the listener object so it can be stored in the conf map."
   [{:keys [connection] :as conf}]
   (let [chat-manager (ChatManager/getInstanceFor connection)
-        listener (reify
-                   IncomingChatMessageListener
-                   (newIncomingMessage [_ from message _chat]
-                     (handle-dm! conf (breakup-jid conf from) (.getBody message))))]
+        listener     (reify
+                      IncomingChatMessageListener
+                        (newIncomingMessage [_ from message _chat]
+                          (handle-dm! conf (breakup-jid conf from) (.getBody message))))]
     (.addIncomingListener chat-manager listener)
     (tel/log! :info ["Message listener registered"])
     listener))
@@ -400,11 +418,11 @@
   [{:keys [connection muc-service xmpp-domain !muc-room-listeners] :as conf} room-id]
   (try
     (let [^AbstractXMPPConnection conn connection
-          muc-manager (MultiUserChatManager/getInstanceFor conn)
-          room-jid-str (str room-id "@" muc-service)
-          room-jid (JidCreate/entityBareFrom room-jid-str)
-          ^MultiUserChat muc (.getMultiUserChat muc-manager room-jid)
-          nickname (Resourcepart/from (:user-id member-admin-bot))]
+          muc-manager                  (MultiUserChatManager/getInstanceFor conn)
+          room-jid-str                 (str room-id "@" muc-service)
+          room-jid                     (JidCreate/entityBareFrom room-jid-str)
+          ^MultiUserChat muc           (.getMultiUserChat muc-manager room-jid)
+          nickname                     (Resourcepart/from (:user-id member-admin-bot))]
 
       ;; Join the room
       (.join muc nickname)
@@ -412,17 +430,17 @@
 
       ;; Add message listener
       (let [listener (reify
-                       MessageListener
-                       (processMessage [_ message]
-                         (when-let [body (.getBody message)]
-                           (let [from (.getFrom message)
-                                 sender-nickname (str (.getResourceOrNull from))]
-                             (handle-muc-message! conf
-                                                  (breakup-jid conf from)
-                                                  {:local-part sender-nickname
-                                                   :domain xmpp-domain
-                                                   :service :muc}
-                                                  body)))))]
+                      MessageListener
+                        (processMessage [_ message]
+                          (when-let [body (.getBody message)]
+                            (let [from            (.getFrom message)
+                                  sender-nickname (str (.getResourceOrNull from))]
+                              (handle-muc-message! conf
+                                                   (breakup-jid conf from)
+                                                   {:local-part sender-nickname
+                                                    :domain     xmpp-domain
+                                                    :service    :muc}
+                                                   body)))))]
         (.addMessageListener muc listener)
 
         ;; Store listener in atom for tracking
@@ -441,14 +459,14 @@
    and only joins rooms that don't have listeners yet."
   [{:keys [user-db muc-service !muc-room-listeners] :as conf}]
   (try
-    (let [db (file-db/read-user-db user-db)
-          rooms (:rooms db)
+    (let [db                 (file-db/read-user-db user-db)
+          rooms              (:rooms db)
           existing-listeners (if !muc-room-listeners @!muc-room-listeners {})
-          joined-rooms (atom [])]
+          joined-rooms       (atom [])]
 
-      (doseq [room rooms
-              :let [room-id (:room-id room)
-                    room-jid-str (when room-id (str room-id "@" muc-service))]
+      (doseq [room  rooms
+              :let  [room-id      (:room-id room)
+                     room-jid-str (when room-id (str room-id "@" muc-service))]
               :when (and room-id (not (contains? existing-listeners room-jid-str)))]
         (when-let [muc (join-muc-room conf room-id)]
           (swap! joined-rooms conj {:room-id room-id :muc muc})))
@@ -471,7 +489,7 @@
    Returns the MultiUserChat object on success, nil if already joined or on failure."
   [{:keys [muc-service !muc-room-listeners] :as admin-bot} room-id]
   (when (and admin-bot !muc-room-listeners)
-    (let [room-jid-str (str room-id "@" muc-service)
+    (let [room-jid-str       (str room-id "@" muc-service)
           existing-listeners @!muc-room-listeners]
       (if (contains? existing-listeners room-jid-str)
         (do
@@ -515,8 +533,8 @@
 (defn- save-credentials
   "Saves credentials to file-db."
   [user-db-component username password]
-  (let [creds {:username username :password password}
-        db (file-db/read-user-db user-db-component)
+  (let [creds      {:username username :password password}
+        db         (file-db/read-user-db user-db-component)
         updated-db (assoc-in db [:do-not-edit-state :admin-credentials] creds)]
     (file-db/write-user-db user-db-component updated-db)
     creds))
@@ -549,8 +567,8 @@
 (defn- get-or-create-credentials
   "Gets existing credentials or creates new ones if admin-bot doesn't exist in file-db."
   [user-db-component ejabberd-api]
-  (let [username (:user-id member-admin-bot)
-        db (file-db/read-user-db user-db-component)
+  (let [username       (:user-id member-admin-bot)
+        db             (file-db/read-user-db user-db-component)
         existing-creds (get-in db [:do-not-edit-state :admin-credentials])]
 
     ;; Ensure user exists in ejabberd (creates with new creds if needed)
@@ -574,75 +592,79 @@
   ;; Initialize OMEMO service with file-based store
   (init-omemo-service! (:db-folder user-db))
 
-  (let [username (:user-id member-admin-bot)
-        muc-service (:muc-service ejabberd-api)
-        credentials (atom (get-or-create-credentials user-db ejabberd-api))
+  (let [username            (:user-id member-admin-bot)
+        muc-service         (:muc-service ejabberd-api)
+        credentials         (atom (get-or-create-credentials user-db ejabberd-api))
 
         ;; Connection attempt that uses current credentials from atom
-        attempt-connection (fn []
-                             (create-xmpp-connection
-                              (:username @credentials)
-                              (:password @credentials)
-                              xmpp-domain))
+        attempt-connection  (fn []
+                              (create-xmpp-connection
+                               (:username @credentials)
+                               (:password @credentials)
+                               xmpp-domain))
 
         ;; Callback to reset password on authentication failure (but not IP bans)
-        retry-callback (fn [{:keys [attempt error]}]
-                         (when (and error (= attempt 1))
-                           (let [ex-data (ex-data error)]
-                             (cond
-                               ;; IP ban - don't retry, just warn
-                               (:ip-ban? ex-data)
-                               (tel/log! :error ["IP banned from XMPP server - cannot retry"
-                                                 {:condition (:condition ex-data)
-                                                  :text (:text ex-data)
-                                                  :advice "Wait for ban to expire or manually unban IP on ejabberd server"}])
+        retry-callback      (fn [{:keys [attempt error]}]
+                              (when (and error (= attempt 1))
+                                (let [ex-data (ex-data error)]
+                                  (cond
+                                    ;; IP ban - don't retry, just warn
+                                    (:ip-ban? ex-data)
+                                    (tel/log! :error
+                                              ["IP banned from XMPP server - cannot retry"
+                                               {:condition (:condition ex-data)
+                                                :text (:text ex-data)
+                                                :advice
+                                                "Wait for ban to expire or manually unban IP on ejabberd server"}])
 
-                               ;; Authentication failure - reset password and retry
-                               (= :authentication-failure (:type ex-data))
-                               (do
-                                 (tel/log! :warn ["Authentication failed, resetting password"])
-                                 (reset! credentials (reset-password user-db ejabberd-api username)))
+                                    ;; Authentication failure - reset password and retry
+                                    (= :authentication-failure (:type ex-data))
+                                    (do
+                                      (tel/log! :warn ["Authentication failed, resetting password"])
+                                      (reset! credentials (reset-password user-db ejabberd-api username)))
 
-                               ;; Other errors - just log
-                               :else
-                               (tel/log! :error ["Connection failed with unknown error" {:error (ex-message error)}])))))
+                                    ;; Other errors - just log
+                                    :else
+                                    (tel/log! :error
+                                              ["Connection failed with unknown error" {:error (ex-message error)}])))))
 
         ;; Attempt connection with retry (only if not IP banned)
-        connection (try
-                     (again/with-retries
-                       {::again/callback retry-callback
-                        ::again/strategy [0] ;; One retry after callback
-                        ::again/callback-result-fn (fn [{:keys [error]}]
-                                                     ;; Don't retry if IP banned
-                                                     (if (and error (:ip-ban? (ex-data error)))
-                                                       ::again/fail
-                                                       ::again/retry))}
-                       (attempt-connection))
-                     (catch Exception e
-                       (let [ex-data (ex-data e)]
-                         (if (:ip-ban? ex-data)
-                           (tel/log! :error ["Admin bot cannot start - IP is banned from XMPP server"
-                                             {:unban-time (:text ex-data)}])
-                           (tel/log! :error ["Failed to connect admin bot" {:error (ex-message e)}])))
-                       nil))
+        connection          (try
+                              (again/with-retries
+                               {::again/callback           retry-callback
+                                ::again/strategy           [0] ;; One retry after callback
+                                ::again/callback-result-fn (fn [{:keys [error]}]
+                                                             ;; Don't retry if IP banned
+                                                             (if (and error (:ip-ban? (ex-data error)))
+                                                               ::again/fail
+                                                               ::again/retry))}
+                               (attempt-connection))
+                              (catch Exception e
+                                (let [ex-data (ex-data e)]
+                                  (if (:ip-ban? ex-data)
+                                    (tel/log! :error
+                                              ["Admin bot cannot start - IP is banned from XMPP server"
+                                               {:unban-time (:text ex-data)}])
+                                    (tel/log! :error ["Failed to connect admin bot" {:error (ex-message e)}])))
+                                nil))
 
         ;; Initialize listener tracking atoms
         !muc-room-listeners (atom {})
 
         ;; Create atom to hold final conf (for reconnection handlers)
-        !final-conf (atom nil)
+        !final-conf         (atom nil)
 
         ;; Setup base config
-        conf {:admin-http-portal-url admin-http-portal-url
-              :connection connection
-              :credentials @credentials
-              :user-db user-db
-              :ejabberd-api ejabberd-api
-              :link-provider link-provider
-              :xmpp-domain xmpp-domain
-              :muc-service muc-service
-              :muc-room-listeners !muc-room-listeners
-              :error (when-not connection "Failed to establish XMPP connection")}]
+        conf                {:admin-http-portal-url admin-http-portal-url
+                             :connection            connection
+                             :credentials           @credentials
+                             :user-db               user-db
+                             :ejabberd-api          ejabberd-api
+                             :link-provider         link-provider
+                             :xmpp-domain           xmpp-domain
+                             :muc-service           muc-service
+                             :muc-room-listeners    !muc-room-listeners
+                             :error                 (when-not connection "Failed to establish XMPP connection")}]
 
     (if connection
       (do
@@ -652,35 +674,36 @@
         (let [connection-listener (setup-connection-listener connection !final-conf)
 
               ;; Create OMEMO manager (store already configured globally)
-              omemo-manager (create-omemo-manager connection)
+              omemo-manager       (create-omemo-manager connection)
 
               ;; CRITICAL FIX: Create conf-with-omemo BEFORE setting up listeners
               ;; so that all listeners (including OMEMO listener) capture the complete
               ;; conf with OMEMO support
-              conf-with-omemo (assoc conf
-                                     :connection-listener connection-listener
-                                     :omemo-manager omemo-manager)
+              conf-with-omemo     (assoc conf
+                                         :connection-listener connection-listener
+                                         :omemo-manager       omemo-manager)
 
               ;; NOW setup OMEMO listener with complete config
-              omemo-listener (setup-omemo-listener omemo-manager conf-with-omemo)
+              omemo-listener      (setup-omemo-listener omemo-manager conf-with-omemo)
 
               ;; Setup DM listener and store it (now with OMEMO in conf)
-              dm-listener (setup-message-listener conf-with-omemo)
+              dm-listener         (setup-message-listener conf-with-omemo)
 
               ;; Join all MUC rooms (now with OMEMO in conf)
-              joined-rooms (join-all-rooms conf-with-omemo)
+              joined-rooms        (join-all-rooms conf-with-omemo)
 
-              final-conf (assoc conf-with-omemo
-                                :omemo-listener omemo-listener
-                                :dm-message-listener dm-listener
-                                :joined-rooms joined-rooms)]
+              final-conf          (assoc conf-with-omemo
+                                         :omemo-listener      omemo-listener
+                                         :dm-message-listener dm-listener
+                                         :joined-rooms        joined-rooms)]
           ;; Update the atom so reconnection handlers have access to complete conf
           (reset! !final-conf final-conf)
           (def testing-conf* final-conf)
           final-conf))
       (do
-        (tel/log! :warn ["Admin bot component initialized WITHOUT connection"
-                         {:reason "Connection failed - check logs above"}])
+        (tel/log! :warn
+                  ["Admin bot component initialized WITHOUT connection"
+                   {:reason "Connection failed - check logs above"}])
         (def testing-conf* conf)
         conf))))
 
@@ -694,13 +717,13 @@
 (defmethod ig/resume-key ::admin-bot
   [_ {:keys [user-db ejabberd-api link-provider xmpp-domain admin-http-portal-url] :as opts} old-opts old-conf]
   (let [muc-service (:muc-service ejabberd-api)
-        conf (merge old-conf
-                    {:user-db user-db
-                     :ejabberd-api ejabberd-api
-                     :link-provider link-provider
-                     :xmpp-domain xmpp-domain
-                     :muc-service muc-service
-                     :admin-http-portal-url admin-http-portal-url})]
+        conf        (merge old-conf
+                           {:user-db               user-db
+                            :ejabberd-api          ejabberd-api
+                            :link-provider         link-provider
+                            :xmpp-domain           xmpp-domain
+                            :muc-service           muc-service
+                            :admin-http-portal-url admin-http-portal-url})]
     (def testing-conf* conf)
     conf))
 

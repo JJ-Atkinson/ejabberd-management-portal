@@ -24,35 +24,35 @@
                    "jwt"
                    jwt-token
                    {:http-only true
-                    :path "/"
-                    :max-age (* 24 60 60)})) ; 24 hours
+                    :path      "/"
+                    :max-age   (* 24 60 60)})) ; 24 hours
 
 (defn- redirect-without-jwt-param
   "Redirect to the same URL but without the jwt query parameter"
   [request jwt-token]
-  (let [uri (:uri request)
-        query (:query-string request)
+  (let [uri       (:uri request)
+        query     (:query-string request)
         new-query (when query
                     (str/join "&"
                               (remove #(str/starts-with? % "jwt=")
                                       (str/split query #"&"))))
-        new-uri (if (and new-query (not (str/blank? new-query)))
-                  (str uri "?" new-query)
-                  uri)
-        redirect (resp/redirect new-uri)]
+        new-uri   (if (and new-query (not (str/blank? new-query)))
+                    (str uri "?" new-query)
+                    uri)
+        redirect  (resp/redirect new-uri)]
     (set-jwt-cookie redirect jwt-token)))
 
 (defn unauthorized-response
   [conf]
-  {:status 401
+  {:status  401
    :headers {"Content-Type" "text/html"}
-   :body (str (h/html (ui.frag/no-jwt-landing-page conf)))})
+   :body    (str (h/html (ui.frag/no-jwt-landing-page conf)))})
 
 (defn- forbidden-response
   [conf]
-  {:status 403
+  {:status  403
    :headers {"Content-Type" "text/html"}
-   :body (str (h/html (ui.frag/no-jwt-landing-page conf)))})
+   :body    (str (h/html (ui.frag/no-jwt-landing-page conf)))})
 
 (defn wrap-jwt-auth
   "Middleware that checks for JWT authentication via cookie or query param.
@@ -72,7 +72,7 @@
   [conf handler]
   (fn [request]
     (if-let [jwt-token (get-jwt-from-request request)]
-      (let [claims (try (jwt/unsign-jwt {:secret (:jwt-secret conf)
+      (let [claims (try (jwt/unsign-jwt {:secret            (:jwt-secret conf)
                                          :expected-audience (:management-portal-url-base conf)}
                                         jwt-token)
                         (catch Exception e ::no-jwt-claims!))]

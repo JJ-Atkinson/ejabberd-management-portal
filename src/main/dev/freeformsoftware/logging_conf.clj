@@ -4,7 +4,7 @@
    [integrant.core :as ig]
    [taoensso.telemere :as tel])
   (:import
-   [java.util.logging Logger Level]))
+    [java.util.logging Logger Level]))
 
 (set! *warn-on-reflection* true)
 

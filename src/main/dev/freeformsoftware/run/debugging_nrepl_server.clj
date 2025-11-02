@@ -8,9 +8,9 @@
   [_ {:keys [bind port] :or {bind "0.0.0.0" port 8001}}]
   (tel/log! :info ["Starting NREPL server" :bind bind :port port])
   (future
-    (try (start-server :bind bind :port port)
-         (catch Exception e
-           (tel/error! "Unable to start NREPL server!" e)))))
+   (try (start-server :bind bind :port port)
+        (catch Exception e
+          (tel/error! "Unable to start NREPL server!" e)))))
 
 (defmethod ig/halt-key! ::debugging-nrepl-server
   [_ nrepl-server]

@@ -31,7 +31,7 @@
   []
   (println "Starting system!")
   (reset! !system
-          (ig/init (#'config/resolve-config! false)))
+    (ig/init (#'config/resolve-config! false)))
   (when-not @!mcp-started?
     (clojure-mcp.main/start-mcp-server {:port 7888})
     (reset! !mcp-started? true)))
@@ -69,7 +69,7 @@
 
 (defn restart
   []
-  (let [now (System/currentTimeMillis)
+  (let [now          (System/currentTimeMillis)
         last-restart @!last-restarted-at]
     (reset! !last-restarted-at now)
     ;; if a user restarts twice within 5s, we do a full hard restart

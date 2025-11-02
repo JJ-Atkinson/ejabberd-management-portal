@@ -20,9 +20,9 @@
    - 'none' if no intersection"
   [user-groups room-admins room-members]
   (cond
-    (seq (set/intersection user-groups room-admins)) "admin"
+    (seq (set/intersection user-groups room-admins))  "admin"
     (seq (set/intersection user-groups room-members)) "member"
-    :else "none"))
+    :else                                             "none"))
 
 (defn get-room-members-with-affiliations
   "Gets all members who have access to a room along with their affiliations.
@@ -41,16 +41,16 @@
    [{:user-id \"alice\" :name \"Alice Smith\" :jid \"alice@example.org\" :affiliation \"admin\"}
     {:user-id \"bob\" :name \"Bob Jones\" :jid \"bob@example.org\" :affiliation \"member\"}]"
   [room all-members xmpp-domain]
-  (let [room-admins (:admins room)
+  (let [room-admins  (:admins room)
         room-members (:members room)]
     (->> all-members
          (map (fn [member]
                 (let [user-groups (:groups member)
                       affiliation (compute-room-affiliation user-groups room-admins room-members)]
                   (when (not= affiliation "none")
-                    {:user-id (:user-id member)
-                     :name (:name member)
-                     :jid (str (:user-id member) "@" xmpp-domain)
+                    {:user-id     (:user-id member)
+                     :name        (:name member)
+                     :jid         (str (:user-id member) "@" xmpp-domain)
                      :affiliation affiliation}))))
          (remove nil?)
          vec)))

@@ -15,6 +15,21 @@
    [:fn {:error/message "must not be blank"}
     (fn [s] (not (clojure.string/blank? s)))]])
 
+(def sanitized-entity-id
+  "Schema for entity IDs (user-id, room-id) that conform to ejabberd JID requirements.
+   
+   Valid entity IDs must:
+   - Contain only lowercase letters (a-z), digits (0-9), and hyphens (-)
+   - Not start or end with a hyphen
+   
+   This matches the output format of str->entity-id in sync-state."
+  [:and
+   :string
+   [:fn {:error/message "must not be blank"}
+    (fn [s] (not (clojure.string/blank? s)))]
+   [:re {:error/message "must contain only lowercase letters, digits, and hyphens (no leading/trailing hyphens)"}
+    #"^[a-z0-9]+([a-z0-9-]*[a-z0-9]+)?$"]])
+
 (defn unique-by
   "Creates a validator for uniqueness of a collection by a given key function.
    f - function to extract the value to check for uniqueness
@@ -98,17 +113,19 @@
   "Schema for a room. Uses dynamic var *valid-groups* for validation."
   [:map {:closed true}
    [:name non-blank-string]
-   [:room-id {:optional true} non-blank-string]
-   [:members [:and
-              [:set :keyword]
-              [:fn {:error/message "must not be empty"}
-               seq]
-              (subset-of? "members must only reference groups defined in :groups")]]
-   [:admins [:and
-             [:set :keyword]
-             [:fn {:error/message "must not be empty"}
-              seq]
-             (subset-of? "admins must only reference groups defined in :groups")]]
+   [:room-id {:optional true} sanitized-entity-id]
+   [:members
+    [:and
+     [:set :keyword]
+     [:fn {:error/message "must not be empty"}
+      seq]
+     (subset-of? "members must only reference groups defined in :groups")]]
+   [:admins
+    [:and
+     [:set :keyword]
+     [:fn {:error/message "must not be empty"}
+      seq]
+     (subset-of? "admins must only reference groups defined in :groups")]]
    [:only-admins-can-speak? :boolean]])
 
 (def rooms-schema
@@ -127,17 +144,20 @@
    - *duplicate-names* for name uniqueness
    - *duplicate-user-ids* for user-id uniqueness"
   [:map {:closed true}
-   [:name [:and
-           non-blank-string
-           (not-duplicate? #'*duplicate-names* "name is already used by another member")]]
-   [:user-id [:and
-              non-blank-string
-              (not-duplicate? #'*duplicate-user-ids* "user-id is already used by another member")]]
-   [:groups [:and
-             [:set :keyword]
-             [:fn {:error/message "must not be empty"}
-              seq]
-             (subset-of? "groups must only reference groups defined in :groups")]]])
+   [:name
+    [:and
+     non-blank-string
+     (not-duplicate? #'*duplicate-names* "name is already used by another member")]]
+   [:user-id
+    [:and
+     sanitized-entity-id
+     (not-duplicate? #'*duplicate-user-ids* "user-id is already used by another member")]]
+   [:groups
+    [:and
+     [:set :keyword]
+     [:fn {:error/message "must not be empty"}
+      seq]
+     (subset-of? "groups must only reference groups defined in :groups")]]])
 
 (def members-schema
   "Schema for the :members collection.
@@ -188,11 +208,12 @@
   [data]
   (cond
     (map? data)
-    (into {} (keep (fn [[k v]]
-                     (let [cleaned (remove-nil-values v)]
-                       (when (not (nil? cleaned))
-                         [k cleaned])))
-                   data))
+    (into {}
+          (keep (fn [[k v]]
+                  (let [cleaned (remove-nil-values v)]
+                    (when (not (nil? cleaned))
+                      [k cleaned])))
+                data))
 
     (vector? data)
     (let [cleaned (into [] (keep remove-nil-values data))]
@@ -212,10 +233,10 @@
   (if (m/validate groups-schema groups)
     {:valid? true}
     (let [explanation (m/explain groups-schema groups)]
-      {:valid? false
-       :errors (-> explanation
-                   (me/with-spell-checking)
-                   (me/humanize))
+      {:valid?      false
+       :errors      (-> explanation
+                        (me/with-spell-checking)
+                        (me/humanize))
        :error-value (me/error-value explanation {::me/mask-valid-values '...})})))
 
 (defn validate-room
@@ -225,12 +246,12 @@
     (if (m/validate room-schema room)
       {:valid? true}
       (let [explanation (m/explain room-schema room)
-            errors (-> explanation
-                       (me/with-spell-checking)
-                       (me/humanize))
+            errors      (-> explanation
+                            (me/with-spell-checking)
+                            (me/humanize))
             error-value (me/error-value explanation {::me/mask-valid-values '...})]
-        {:valid? false
-         :errors (remove-nil-values errors)
+        {:valid?      false
+         :errors      (remove-nil-values errors)
          :error-value (remove-nil-values error-value)}))))
 
 (defn validate-rooms
@@ -240,12 +261,12 @@
     (if (m/validate rooms-schema rooms)
       {:valid? true}
       (let [explanation (m/explain rooms-schema rooms)
-            errors (-> explanation
-                       (me/with-spell-checking)
-                       (me/humanize))
+            errors      (-> explanation
+                            (me/with-spell-checking)
+                            (me/humanize))
             error-value (me/error-value explanation {::me/mask-valid-values '...})]
-        {:valid? false
-         :errors (remove-nil-values errors)
+        {:valid?      false
+         :errors      (remove-nil-values errors)
          :error-value (remove-nil-values error-value)}))))
 
 (defn validate-member
@@ -255,32 +276,32 @@
     (if (m/validate member-schema member)
       {:valid? true}
       (let [explanation (m/explain member-schema member)
-            errors (-> explanation
-                       (me/with-spell-checking)
-                       (me/humanize))
+            errors      (-> explanation
+                            (me/with-spell-checking)
+                            (me/humanize))
             error-value (me/error-value explanation {::me/mask-valid-values '...})]
-        {:valid? false
-         :errors (remove-nil-values errors)
+        {:valid?      false
+         :errors      (remove-nil-values errors)
          :error-value (remove-nil-values error-value)}))))
 
 (defn validate-members
   "Validates members collection against valid groups and returns humanized errors if invalid.
    Uses dynamic binding to detect duplicate names and user-ids."
   [members valid-groups]
-  (let [duplicate-names (find-duplicates (map :name members))
+  (let [duplicate-names    (find-duplicates (map :name members))
         duplicate-user-ids (find-duplicates (map :user-id members))]
-    (binding [*valid-groups* (set valid-groups)
-              *duplicate-names* duplicate-names
+    (binding [*valid-groups*       (set valid-groups)
+              *duplicate-names*    duplicate-names
               *duplicate-user-ids* duplicate-user-ids]
       (if (m/validate members-schema members)
         {:valid? true}
         (let [explanation (m/explain members-schema members)
-              errors (-> explanation
-                         (me/with-spell-checking)
-                         (me/humanize))
+              errors      (-> explanation
+                              (me/with-spell-checking)
+                              (me/humanize))
               error-value (me/error-value explanation {::me/mask-valid-values '...})]
-          {:valid? false
-           :errors (remove-nil-values errors)
+          {:valid?      false
+           :errors      (remove-nil-values errors)
            :error-value (remove-nil-values error-value)})))))
 
 (defn validate-user-db
@@ -296,20 +317,20 @@
     (let [groups-result (validate-groups (:groups db-to-validate))]
       (if-not (:valid? groups-result)
         ;; If groups are invalid, return early with groups errors
-        {:valid? false
-         :errors {:groups (:errors groups-result)}
+        {:valid?      false
+         :errors      {:groups (:errors groups-result)}
          :error-value {:groups (:error-value groups-result)}}
         ;; Groups are valid, now validate rooms and members separately
-        (let [valid-groups (keys (:groups db-to-validate))
-              rooms-result (validate-rooms (:rooms db-to-validate) valid-groups)
+        (let [valid-groups   (keys (:groups db-to-validate))
+              rooms-result   (validate-rooms (:rooms db-to-validate) valid-groups)
               members-result (validate-members (:members db-to-validate) valid-groups)]
           (if (and (:valid? rooms-result) (:valid? members-result))
             {:valid? true}
-            {:valid? false
-             :errors (remove-nil-values
-                      (merge {}
-                             (when-not (:valid? rooms-result) {:rooms (:errors rooms-result)})
-                             (when-not (:valid? members-result) {:members (:errors members-result)})))
+            {:valid?      false
+             :errors      (remove-nil-values
+                           (merge {}
+                                  (when-not (:valid? rooms-result) {:rooms (:errors rooms-result)})
+                                  (when-not (:valid? members-result) {:members (:errors members-result)})))
              :error-value (remove-nil-values
                            (merge {}
                                   (when-not (:valid? rooms-result) {:rooms (:error-value rooms-result)})
@@ -332,8 +353,9 @@
 
   ;; Load and validate the default user database
   (def db
-    (edn/read-string (slurp
-                      "/home/jarrett/code/personal/ejabberd-management-portal/resources/config/default-user-db copy 2.edn")))
+    (edn/read-string
+     (slurp
+      "/home/jarrett/code/personal/ejabberd-management-portal/resources/config/default-user-db copy 2.edn")))
   (validate-user-db
    (edn/read-string
     (slurp

@@ -17,40 +17,40 @@
      [:div.border-2.p-8.m-4.max-w-lg.w-full
       [:form {:method "POST" :action "/signup"}
        (ui.frag/form
-        [:div
-         [:h1.text-2xl.font-bold.mb-4 (str "Welcome, " name)]
-         [:p.text-lg.text-gray-700.mb-6 "Please create a password"]]
+         [:div
+          [:h1.text-2xl.font-bold.mb-4 (str "Welcome, " name)]
+          [:p.text-lg.text-gray-700.mb-6 "Please create a password"]]
 
-        [:div.flex.flex-col.gap-4
+         [:div.flex.flex-col.gap-4
           ;; Password field
-         (ui.frag/form-input {:type "password"
-                              :id "password"
-                              :label "Password"
-                              :placeholder "Enter your password"
-                              :class ui.frag/input-classes
-                              :required true})
+          (ui.frag/form-input {:type        "password"
+                               :id          "password"
+                               :label       "Password"
+                               :placeholder "Enter your password"
+                               :class       ui.frag/input-classes
+                               :required    true})
 
           ;; Confirm password field
-         (ui.frag/form-input {:type "password"
-                              :id "confirm-password"
-                              :label "Confirm Password"
-                              :placeholder "Re-enter your password"
-                              :class ui.frag/input-classes
-                              :required true})]
+          (ui.frag/form-input {:type        "password"
+                               :id          "confirm-password"
+                               :label       "Confirm Password"
+                               :placeholder "Re-enter your password"
+                               :class       ui.frag/input-classes
+                               :required    true})]
 
          ;; Submit button - right aligned
-        (ui.frag/right-aligned
-         [:button
-          {:type "submit"
-           :class ui.frag/button-classes}
-          "Apply"])
+         (ui.frag/right-aligned
+          [:button
+           {:type  "submit"
+            :class ui.frag/button-classes}
+           "Apply"])
 
-        error)]]])))
+         error)]]])))
 
 (defn signup-confirmation
   "Confirmation page after successful password creation."
   [conf name user-id]
-  (let [xmpp-domain (:xmpp-domain conf)
+  (let [xmpp-domain  (:xmpp-domain conf)
         xmpp-address (str user-id "@" xmpp-domain)]
     (ui.frag/html-body
      conf
@@ -66,55 +66,55 @@
 (defn handle-signup-post
   "Handles POST request for signup - validates passwords and creates account."
   [{:keys [ejabberd-api sync-state user-db] :as conf} request]
-  (let [claims (:jwt-claims request)
-        user-id (:user-id claims)
-        name (:name claims)
-        params (:params request)
-        password (:password params)
+  (let [claims           (:jwt-claims request)
+        user-id          (:user-id claims)
+        name             (:name claims)
+        params           (:params request)
+        password         (:password params)
         confirm-password (:confirm-password params)]
     (cond
       (not= password confirm-password)
-      {:status 400
+      {:status  400
        :headers {"Content-Type" "text/html"}
-       :body (str (h/html
-                   (signup-form conf name "Passwords do not match. Please try again.")))}
+       :body    (str (h/html
+                      (signup-form conf name "Passwords do not match. Please try again.")))}
 
       (< (count password) 12)
-      {:status 400
+      {:status  400
        :headers {"Content-Type" "text/html"}
-       :body (str (h/html
-                   (signup-form conf name "Password must be at least 12 characters long.")))}
+       :body    (str (h/html
+                      (signup-form conf name "Password must be at least 12 characters long.")))}
 
       (:locked? (file-db/read-lock-state user-db))
-      {:status 400
+      {:status  400
        :headers {"Content-Type" "text/html"}
-       :body (str (h/html
-                   (signup-form conf name "Please wait a minute. The server is processing a refresh.")))}
+       :body    (str (h/html
+                      (signup-form conf name "Please wait a minute. The server is processing a refresh.")))}
 
       :else
-;; Passwords match and meet requirements
+      ;; Passwords match and meet requirements
       (try
         (sync-state/update-password sync-state user-id password)
         (let [db (file-db/read-user-db user-db)
               db (dissoc db :!allow-insecure-signup-for-user)]
           (file-db/write-user-db user-db db))
-        {:status 200
+        {:status  200
          :headers {"Content-Type" "text/html"}
-         :body (str (h/html (signup-confirmation conf name user-id)))}
+         :body    (str (h/html (signup-confirmation conf name user-id)))}
         (catch Exception e
-          {:status 500
+          {:status  500
            :headers {"Content-Type" "text/html"}
-           :body (str (h/html
-                       (signup-form conf name (str "Failed to set password: " (ex-message e)))))})))))
+           :body    (str (h/html
+                          (signup-form conf name (str "Failed to set password: " (ex-message e)))))})))))
 
 (defn routes
   [conf]
-  {"GET /signup" (fn [request]
-                   (let [claims (:jwt-claims request)
-                         name (:name claims)]
-                     {:status 200
-                      :headers {"Content-Type" "text/html"}
-                      :body (str (h/html (signup-form conf name nil)))}))
+  {"GET /signup"  (fn [request]
+                    (let [claims (:jwt-claims request)
+                          name   (:name claims)]
+                      {:status  200
+                       :headers {"Content-Type" "text/html"}
+                       :body    (str (h/html (signup-form conf name nil)))}))
 
    "POST /signup" (partial handle-signup-post conf)})
 

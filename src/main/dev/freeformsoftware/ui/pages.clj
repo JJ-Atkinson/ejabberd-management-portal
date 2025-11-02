@@ -10,15 +10,15 @@
 (set! *warn-on-reflection* true)
 
 (def pages
-  [{:id :user-management
-    :route "/pages/users"
-    :title "User Management"
-    :body-fn #'user-management/users-list-page
+  [{:id        :user-management
+    :route     "/pages/users"
+    :title     "User Management"
+    :body-fn   #'user-management/users-list-page
     :action-fn #'user-management/action-button-fragment}
-   {:id :room-management
-    :route "/pages/rooms"
-    :title "Room Management"
-    :body-fn #'room-management/rooms-list-page
+   {:id        :room-management
+    :route     "/pages/rooms"
+    :title     "Room Management"
+    :body-fn   #'room-management/rooms-list-page
     :action-fn #'room-management/action-button-fragment}])
 
 (def page-by-id
@@ -40,7 +40,7 @@
             {:class (if (= page id)
                       ui.frag/selected-link-classes
                       ui.frag/clickable-link-classes)
-             :href route}
+             :href  route}
             title])]
         (when action-fn (action-fn conf req)))]
       (when body-fn (body-fn conf req))))))
@@ -48,8 +48,8 @@
 (defn page-routes
   [conf]
   (server.route-utils/merge-routes
-   {"GET /" (fn [request]
-              (resp/redirect "/pages/users"))
+   {"GET /"               (fn [request]
+                            (resp/redirect "/pages/users"))
     "GET /pages/users/**" (fn [request]
                             (-> (resp/response (str (h/html (root-admin-page conf request :user-management))))
                                 (resp/content-type "text/html")))

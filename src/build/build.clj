@@ -35,21 +35,21 @@
   (clean nil)
 
   (println "Copying source files...")
-  (b/copy-dir {:src-dirs ["src/main" "prod-resources"]
+  (b/copy-dir {:src-dirs   ["src/main" "prod-resources"]
                :target-dir class-dir})
 
   (println "Compiling Clojure with AOT...")
-  (b/compile-clj {:basis @basis
-                  :src-dirs ["src/main"]
-                  :class-dir class-dir
+  (b/compile-clj {:basis        @basis
+                  :src-dirs     ["src/main"]
+                  :class-dir    class-dir
                   :compile-opts {:direct-linking true}
-                  :ns-compile ['dev.freeformsoftware.run.prod]})
+                  :ns-compile   ['dev.freeformsoftware.run.prod]})
 
   (println "Building uberjar...")
   (b/uber {:class-dir class-dir
            :uber-file uber-file
-           :basis @basis
-           :main 'dev.freeformsoftware.run.prod})
+           :basis     @basis
+           :main      'dev.freeformsoftware.run.prod})
 
   (println (str "\nUberjar created: " uber-file))
   (println (str "Size: " (format "%.2f MB" (/ (.length (io/file uber-file)) 1024.0 1024.0))))
@@ -66,14 +66,14 @@
   (clean nil)
 
   (println "Copying source files...")
-  (b/copy-dir {:src-dirs ["src/main" "prod-resources"]
+  (b/copy-dir {:src-dirs   ["src/main" "prod-resources"]
                :target-dir class-dir})
 
   (println "Creating jar...")
   (b/jar {:class-dir class-dir
-          :jar-file jar-file
-          :basis @basis
-          :main 'dev.freeformsoftware.run.prod})
+          :jar-file  jar-file
+          :basis     @basis
+          :main      'dev.freeformsoftware.run.prod})
 
   (println (str "\nJar created: " jar-file)))
 
@@ -82,10 +82,10 @@
   [_]
   (jar nil)
   (println "Installing to local maven repository...")
-  (b/install {:basis @basis
-              :lib lib
-              :version version
-              :jar-file jar-file
+  (b/install {:basis     @basis
+              :lib       lib
+              :version   version
+              :jar-file  jar-file
               :class-dir class-dir}))
 
 (defn all
@@ -110,14 +110,14 @@
 (defn -main
   "CLI entry point for builds"
   [& args]
-  (let [task (or (first args) "uber")
+  (let [task    (or (first args) "uber")
         task-fn (case task
-                  "clean" clean
-                  "prep" prep
-                  "uber" uber
-                  "jar" jar
+                  "clean"   clean
+                  "prep"    prep
+                  "uber"    uber
+                  "jar"     jar
                   "install" install
-                  "all" all
+                  "all"     all
                   (do
                     (println "Unknown task:" task)
                     (println "\nAvailable tasks:")

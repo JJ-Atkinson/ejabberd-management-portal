@@ -76,7 +76,7 @@
   [contents]
   [:div.flex.flex-row.items-center.justify-center.h-screen.w-screen.absolute.modal-container.min-h-fit.min-w-fit
    {:class ["bg-gray-50/75 z-[60]"]
-    :_ "on closeModal remove me"}
+    :_     "on closeModal remove me"}
    [:div.max-h-screen.overflow-y-auto
     {:class ["border-2 bg-orange-50 border-slate-900 min-w-fit min-h-fit" "w-screen md:w-3/4" "max-w-full md:max-w-lg"
              "p-5"]}
@@ -146,8 +146,11 @@
    and shows the .processing-notification within the specified form.
    Use this on action buttons (delete/save/submit/apply) to prevent duplicate submissions."
   [form-id]
-  (str "on htmx:beforeRequest 
-     remove .hidden from <#" form-id " .processing-notification/> 
+  (str
+   "on htmx:beforeRequest 
+     remove .hidden from <#"
+   form-id
+   " .processing-notification/> 
      add @disabled='true' to .disabling-action-button
      add .opacity-50 to .disabling-action-button
      add .pointer-events-none to .disabling-action-button"))
@@ -240,11 +243,11 @@
    [:label.text-lg.font-semibold {:for id} label]
    [(case type
       "textarea" :textarea
-      "select" :select
+      "select"   :select
       :input)
     (cond-> input-props
       (not placeholder) (assoc :placeholder label)
-      (not name) (assoc :name id))
+      (not name)        (assoc :name id))
     input-body]])
 
 (defn no-jwt-landing-page

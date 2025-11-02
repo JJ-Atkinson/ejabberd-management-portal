@@ -66,8 +66,9 @@
   [enable-prod?]
   (let [parsed-config
         (->> (read-config-files! enable-prod?)
-             (map (partial ig/read-string {:readers {'n/ref reader-nref
-                                                     'n/reader-file-str reader-file-str}}))
+             (map (partial ig/read-string
+                           {:readers {'n/ref             reader-nref
+                                      'n/reader-file-str reader-file-str}}))
              (reduce deep-merge)
              (resolve-nrefs)
              :system)]

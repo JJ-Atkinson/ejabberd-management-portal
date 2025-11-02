@@ -26,7 +26,7 @@
         (when-not (:locked? (file-db/read-lock-state user-db-component))
           ;; Read the file and get its SHA
           (let [current-sha (user-db/compute-current-sha user-db-component)
-                last-sha (sync-state/get-last-written-sync-state-sha sync-state-component)]
+                last-sha    (sync-state/get-last-written-sync-state-sha sync-state-component)]
 
             (if (= current-sha last-sha)
               (tel/log! :debug ["File change detected but SHA unchanged, skipping sync" {:sha current-sha}])
@@ -50,16 +50,16 @@
 
   (let [db-folder (:db-folder user-db)
         ;; Read initial SHA to track changes
-        watcher (beholder/watch
-                 (fn [event]
-                   (handle-file-change sync-state user-db event))
-                 db-folder)]
+        watcher   (beholder/watch
+                   (fn [event]
+                     (handle-file-change sync-state user-db event))
+                   db-folder)]
 
     (tel/log! :info ["Started watching" db-folder "for changes"])
-    {:watcher watcher
+    {:watcher    watcher
      :sync-state sync-state
-     :user-db user-db
-     :db-folder db-folder}))
+     :user-db    user-db
+     :db-folder  db-folder}))
 
 (defmethod ig/halt-key! ::confwatch
   [_ {:keys [watcher db-folder]}]

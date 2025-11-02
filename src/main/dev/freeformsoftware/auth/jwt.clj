@@ -9,7 +9,7 @@
 
 ;; Default internal JWT configuration
 (def internal-config
-  {:issuer "dev.freeformsoftware.ejabberd-management-portal"
+  {:issuer  "dev.freeformsoftware.ejabberd-management-portal"
    :subject "dev.freeformsoftware.ejabberd-management-portal.ui-portal"})
 
 ;; Jitsi configuration is now defined in config.edn and passed as a parameter.
@@ -31,8 +31,8 @@
   claims: map of JWT claims (will be merged with iss/sub/aud/iat/exp)
   opts: optional map with :duration-hours (default 24)"
   [{:keys [secret audience]} claims & {:keys [duration-hours] :or {duration-hours 24}}]
-  (let [now (quot (System/currentTimeMillis) 1000)
-        exp (+ now (* duration-hours 60 60))
+  (let [now     (quot (System/currentTimeMillis) 1000)
+        exp     (+ now (* duration-hours 60 60))
         payload (merge
                  {:iss (:issuer internal-config)
                   :sub (:subject internal-config)
@@ -53,17 +53,20 @@
   (let [claims (jwt/unsign token secret)]
     ;; Verify issuer matches internal config
     (when-not (= (:iss claims) (:issuer internal-config))
-      (throw (ex-info "Invalid issuer" {:expected (:issuer internal-config)
-                                        :actual (:iss claims)})))
+      (throw (ex-info "Invalid issuer"
+                      {:expected (:issuer internal-config)
+                       :actual   (:iss claims)})))
     ;; Verify subject matches internal config
     (when-not (= (:sub claims) (:subject internal-config))
-      (throw (ex-info "Invalid subject" {:expected (:subject internal-config)
-                                         :actual (:sub claims)})))
+      (throw (ex-info "Invalid subject"
+                      {:expected (:subject internal-config)
+                       :actual   (:sub claims)})))
     ;; Verify audience matches expected value
     (when expected-audience
       (when-not (= (:aud claims) expected-audience)
-        (throw (ex-info "Invalid audience" {:expected expected-audience
-                                            :actual (:aud claims)}))))
+        (throw (ex-info "Invalid audience"
+                        {:expected expected-audience
+                         :actual   (:aud claims)}))))
     claims))
 
 ;; =============================================================================
@@ -84,21 +87,22 @@
     - :duration-hours - token validity in hours (default 2)"
   [{:keys [secret]} jitsi-config user-name user-jid room-name &
    {:keys [avatar-url moderator? duration-hours]
-    :or {avatar-url nil moderator? false duration-hours 2}}]
-  (let [now (quot (System/currentTimeMillis) 1000)
-        exp (+ now (* duration-hours 60 60))
-        user-context (cond-> {:name user-name
-                              :email user-jid
+    :or   {avatar-url nil moderator? false duration-hours 2}}]
+  (let [now          (quot (System/currentTimeMillis) 1000)
+        exp          (+ now (* duration-hours 60 60))
+        user-context (cond-> {:name      user-name
+                              :email     user-jid
                               :moderator moderator?}
                        avatar-url (assoc :avatar avatar-url))
-        payload {:iss (:issuer jitsi-config)
-                 :aud (:audience jitsi-config)
-                 :sub (:subject jitsi-config)
-                 :room room-name
-                 :exp exp
-                 :iat now
-                 :context {:user user-context}}
-        jwt-token (jwt/sign payload secret {:header {:typ "JWT"}})
-        base-url (:base-url jitsi-config)]
-    (str base-url "/" (java.net.URLEncoder/encode room-name "UTF-8")
+        payload      {:iss     (:issuer jitsi-config)
+                      :aud     (:audience jitsi-config)
+                      :sub     (:subject jitsi-config)
+                      :room    room-name
+                      :exp     exp
+                      :iat     now
+                      :context {:user user-context}}
+        jwt-token    (jwt/sign payload secret {:header {:typ "JWT"}})
+        base-url     (:base-url jitsi-config)]
+    (str base-url
+         "/"     (java.net.URLEncoder/encode room-name "UTF-8")
          "?jwt=" (java.net.URLEncoder/encode jwt-token "UTF-8"))))

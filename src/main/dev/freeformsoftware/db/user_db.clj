@@ -98,6 +98,28 @@
       (fs/copy source-file target-file {:replace-existing true})
       (fs/delete source-file))))
 
+(defn- write-error-file
+  "Writes validation errors to userdb-errors.edn, formatted with zprint."
+  [db-folder validation-result]
+  (let [error-file (fs/path db-folder "userdb-errors.edn")
+        error-data {:validation-failed true
+                    :timestamp         (java.util.Date.)
+                    :errors            (:errors validation-result)
+                    :error-value       (:error-value validation-result)}]
+    (tel/log! :warn ["Writing validation errors to" (str error-file)])
+    (spit (fs/file error-file)
+          (zp/zprint-str error-data {:map {:sort? false}}))
+    error-file))
+
+(defn- delete-error-file
+  "Deletes userdb-errors.edn if it exists."
+  [db-folder]
+  (let [error-file (fs/path db-folder "userdb-errors.edn")]
+    (when (fs/exists? error-file)
+      (tel/log! :debug ["Deleting error file" (str error-file)])
+      (fs/delete error-file)
+      true)))
+
 ;; =============================================================================
 ;; Public API Functions
 ;; =============================================================================
@@ -140,6 +162,9 @@
 (defn read-user-db
   "Reads the user database from disk, validates it, and attaches SHA256.
    
+   On validation failure: Writes errors to userdb-errors.edn before throwing.
+   On validation success: Deletes userdb-errors.edn if it exists.
+   
    Args:
      component - Component map returned from ig/init-key with :db-folder key
    
@@ -160,15 +185,21 @@
           ;; Validate against schema
           validation-result (schema/validate-user-db config)]
 
-      (when-not (:valid? validation-result)
-        (tel/log! :error ["User-db validation failed" validation-result])
-        (throw (ex-info "User database validation failed"
-                        {:type        :validation-error
-                         :errors      (:errors validation-result)
-                         :error-value (:error-value validation-result)})))
+      (if-not (:valid? validation-result)
+        (do
+          ;; Write errors to file before throwing
+          (write-error-file db-folder validation-result)
+          (tel/log! :error ["User-db validation failed" validation-result])
+          (throw (ex-info "User database validation failed"
+                          {:type        :validation-error
+                           :errors      (:errors validation-result)
+                           :error-value (:error-value validation-result)})))
 
-      (tel/log! :debug ["Successfully read and validated user-db" {:sha256 sha256}])
-      (assoc config :_file-sha256 sha256))))
+        (do
+          ;; Delete error file on successful validation
+          (delete-error-file db-folder)
+          (tel/log! :debug ["Successfully read and validated user-db" {:sha256 sha256}])
+          (assoc config :_file-sha256 sha256))))))
 
 (defn write-user-db
   "Writes the user database to disk with automatic backup creation.

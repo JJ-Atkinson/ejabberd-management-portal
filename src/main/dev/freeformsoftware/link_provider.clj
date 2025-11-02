@@ -49,16 +49,15 @@
    
    Args:
      component - Component map with :management-portal-url-base and :jwt-secret
+     user - Username for admin (REQUIRED)
    
    Options:
      :duration-hours - JWT validity duration (default 24)
-     :user - Username for admin (default 'admin')
    
    Returns:
      Full URL to management portal with admin JWT token"
-  [component & {:keys [duration-hours user]
-                :or {duration-hours 24
-                     user "admin"}}]
+  [component user & {:keys [duration-hours]
+                     :or {duration-hours 24}}]
   (let [jwt-secret (:jwt-secret component)
         base-url (:management-portal-url-base component)
         admin-jwt (jwt/create-jwt

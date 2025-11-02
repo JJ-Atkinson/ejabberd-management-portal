@@ -23,6 +23,7 @@
             :members                #{:group/owner :group/officer :group/member :group/bot}
             :admins                 #{:group/owner :group/officer}
             :only-admins-can-speak? false}]
+ :!allow-insecure-signup-for-user "o1"
  :members [{:name    "Officer 1"
             :user-id "o1"
             :groups  #{:group/owner :group/officer :group/member :group/aspirant}}]}

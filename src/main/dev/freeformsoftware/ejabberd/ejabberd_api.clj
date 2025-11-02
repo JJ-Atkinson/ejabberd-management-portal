@@ -357,6 +357,117 @@
                  :host host}))
 
 ;; =============================================================================
+;; Bookmark Management (XEP-0048)
+;; =============================================================================
+
+(defn- escape-xml-attr
+  "Escapes XML attribute values (quotes, ampersands, etc.)"
+  [s]
+  (-> s
+      (clojure.string/replace "&" "&amp;")
+      (clojure.string/replace "\"" "&quot;")
+      (clojure.string/replace "<" "&lt;")
+      (clojure.string/replace ">" "&gt;")))
+
+(defn- build-bookmark-xml
+  "Builds XEP-0048 bookmark XML storage element.
+   
+   Parameters:
+   - bookmarks: sequence of bookmark maps with keys:
+     - :jid - Full room JID (e.g., 'room@conference.domain.com')
+     - :name - Display name for the bookmark
+     - :autojoin - Boolean, whether to auto-join on login (default: true)
+     - :nick - Optional nickname to use in the room
+   
+   Returns: XML string for storage element
+   
+   Example:
+   (build-bookmark-xml [{:jid \"announcements@conference.example.org\"
+                         :name \"Announcements\"
+                         :autojoin true}
+                        {:jid \"dev@conference.example.org\"
+                         :name \"Dev Team\"
+                         :autojoin true
+                         :nick \"Alice\"}])"
+  [bookmarks]
+  (let [conferences
+        (for [bm bookmarks]
+          (let [jid (escape-xml-attr (:jid bm))
+                name (escape-xml-attr (:name bm))
+                autojoin (if (false? (:autojoin bm)) "false" "true")
+                nick (:nick bm)]
+            (if nick
+              (str "<conference jid=\"" jid "\" "
+                   "autojoin=\"" autojoin "\" "
+                   "name=\"" name "\">"
+                   "<nick>" (escape-xml-attr nick) "</nick>"
+                   "</conference>")
+              (str "<conference jid=\"" jid "\" "
+                   "autojoin=\"" autojoin "\" "
+                   "name=\"" name "\"/>"))))]
+    (str "<storage xmlns=\"storage:bookmarks\">"
+         (apply str conferences)
+         "</storage>")))
+
+(defn get-user-bookmarks
+  "Get all MUC bookmarks for a user.
+   
+   See: XEP-0048 (Bookmark Storage)
+   
+   Parameters:
+   - component: ejabberd-api component
+   - user: username (without @host)
+   
+   Returns: list of bookmark tuples [jid, name, autojoin, nick]
+   Example: [[\"test-1@conference.example.org\" \"test-1\" \"true\" \"jj\"]
+             [\"announcements@conference.example.org\" \"announcements\" \"true\" \"\"]]"
+  [component user]
+  (make-request component
+                "get_user_bookmarks"
+                {:user user
+                 :host (:xmpp-domain component)}))
+
+(defn set-user-bookmarks
+  "Set all MUC bookmarks for a user (replaces existing bookmarks).
+   
+   IMPORTANT: This operation replaces ALL bookmarks. To add to existing bookmarks,
+   first retrieve them with get-user-bookmarks, modify the list, then set.
+   
+   See: XEP-0048 (Bookmark Storage)
+   
+   Parameters:
+   - component: ejabberd-api component
+   - user: username (without @host)
+   - bookmarks: sequence of bookmark maps with keys:
+     - :jid - Full room JID (required)
+     - :name - Display name (required)
+     - :autojoin - Boolean (optional, defaults to true)
+     - :nick - Nickname (optional)
+   
+   Returns: API response
+   
+   Example:
+   (set-user-bookmarks component \"alice\"
+                       [{:jid \"announcements@conference.example.org\"
+                         :name \"Announcements\"
+                         :autojoin true}
+                        {:jid \"dev-team@conference.example.org\"
+                         :name \"Dev Team\"
+                         :autojoin true
+                         :nick \"Alice\"}])"
+  [component user bookmarks]
+  (let [bookmarks-xml (build-bookmark-xml bookmarks)]
+    (tel/log! :debug ["Setting user bookmarks"
+                      {:user user
+                       :bookmark-count (count bookmarks)
+                       :xml bookmarks-xml}])
+    (make-request component
+                  "set_user_bookmarks"
+                  {:user user
+                   :host (:xmpp-domain component)
+                   :bookmarks_xml bookmarks-xml})))
+
+;; =============================================================================
 ;; Component
 ;; =============================================================================
 

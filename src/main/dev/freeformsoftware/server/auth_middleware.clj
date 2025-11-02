@@ -42,7 +42,7 @@
         redirect (resp/redirect new-uri)]
     (set-jwt-cookie redirect jwt-token)))
 
-(defn- unauthorized-response
+(defn unauthorized-response
   [conf]
   {:status 401
    :headers {"Content-Type" "text/html"}

@@ -23,7 +23,7 @@
                        :allow_user_invites "false"
                        :allow_visitor_nickchange "false"
                        :allow_visitor_status "false"
-                       :allow_voice_requests "true"
+                       :allow_voice_requests "false"
                        :allowpm "participants"
                        :anonymous "false"
                        :captcha_protected "false"

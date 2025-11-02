@@ -11,16 +11,16 @@
    
    Parameters:
    - user-groups: Set of group keywords the user belongs to
-   - room-admins: Set of group keywords that grant admin privileges
+   - room-admins: Set of group keywords that grant owner privileges
    - room-members: Set of group keywords that grant member access
    
    Returns:
-   - 'admin' if user's groups intersect with room's :admins
+   - 'owner' if user's groups intersect with room's :admins
    - 'member' if user's groups intersect with room's :members (but not :admins)
    - 'none' if no intersection"
   [user-groups room-admins room-members]
   (cond
-    (seq (set/intersection user-groups room-admins))  "admin"
+    (seq (set/intersection user-groups room-admins))  "owner"
     (seq (set/intersection user-groups room-members)) "member"
     :else                                             "none"))
 

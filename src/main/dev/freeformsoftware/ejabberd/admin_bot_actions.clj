@@ -102,7 +102,7 @@
   [{:keys [send-message! link-provider user-db]} reply-to]
   (let [user-id (:local-part reply-to)]
     (if (user-has-group? user-db user-id :group/owner)
-      (let [admin-url (link-provider/create-admin-signin-url link-provider)]
+      (let [admin-url (link-provider/create-admin-signin-url link-provider user-id)]
         (send-message! reply-to (str "Admin portal: " admin-url)))
       (send-message! reply-to "Unauthorized: This command is only available to owners."))))
 

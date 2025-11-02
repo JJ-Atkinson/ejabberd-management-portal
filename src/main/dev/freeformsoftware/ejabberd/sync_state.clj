@@ -15,7 +15,6 @@
    [dev.freeformsoftware.db.file-interaction :as file-db]
    [dev.freeformsoftware.db.schema :as schema]
    [dev.freeformsoftware.db.util :as db-util]
-   [dev.freeformsoftware.ejabberd.admin-bot :as ejabberd.admin-bot]
    [dev.freeformsoftware.ejabberd.room-membership :as room-membership]
    [clojure.set :as set]
    [clojure.string :as str]
@@ -246,7 +245,7 @@
 
               ;; Join the newly created room with the admin bot
               (when admin-bot
-                (ejabberd.admin-bot/join-room-if-new! admin-bot room-id)))
+                (admin-bot/join-room-if-new! admin-bot room-id)))
             (catch Exception e
               (tel/log! :error
                         ["Failed to create room"
@@ -358,7 +357,7 @@
 
     :else
     (try
-      (ejabberd.admin-bot/send-message! admin-bot {:local-part user-id :service :dm} message)
+      (admin-bot/send-message! admin-bot {:local-part user-id :service :dm} message)
       (tel/log! :info ["Sent room notification" {:user user-id :room room-name :affiliation new-affiliation}])
       (catch Exception e
         (tel/log! :warn ["Failed to send room notification" {:user user-id :room room-name :error (ex-message e)}])))))
@@ -571,7 +570,7 @@
         muc-service (:muc-service ejabberd-api)
 
         ;; Phase 0: Ghost-include admin bot with only :group/bot
-        admin-bot-member (assoc ejabberd.admin-bot/member-admin-bot
+        admin-bot-member (assoc admin-bot/member-admin-bot
                                 :groups
                                 #{:group/bot})
         current-state (update db :members (fnil conj []) admin-bot-member)

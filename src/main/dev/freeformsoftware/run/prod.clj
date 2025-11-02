@@ -18,7 +18,7 @@
 (defn start-server!
   []
   (reset! !system
-    (ig/init (config/resolve-config! false))))
+    (ig/init (config/resolve-config! true))))
 
 (defn -main
   [& args]

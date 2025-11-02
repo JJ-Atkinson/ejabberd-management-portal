@@ -33,7 +33,6 @@
                                      :payload payload
                                      :status (:status response)}])
 
-    (tap> {:req opts :resp response})
     (if (= 200 (:status response))
       (:body response)
       (do

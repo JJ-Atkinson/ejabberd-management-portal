@@ -266,7 +266,7 @@ java -jar target/ejabberd-management-portal-1.0.{version}-standalone.jar
 The application uses **Integrant** for lifecycle management. Components are defined in `config.edn` and initialized in a specific order:
 
 ```
-:dev.freeformsoftware.db.file-interaction/user-db
+:dev.freeformsoftware.db.user-db/user-db
     ↓
 :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api ← depends on user-db
     ↓
@@ -286,7 +286,7 @@ The application uses **Integrant** for lifecycle management. Components are defi
 **Reading & using components in REPL:**
 ```clojure
 ;; Access initialized system
-(def db-component (:dev.freeformsoftware.db.file-interaction/user-db @!system))
+(def db-component (:dev.freeformsoftware.db.user-db/user-db @!system))
 
 ;; Use it
 (def user-db (file-db/read-user-db db-component))
@@ -511,7 +511,7 @@ dev-routes       ; Development-only (login, logout, WebSocket reload)
 #### Testing Sync Engine
 ```clojure
 ;; Get all components
-(def db-comp (:dev.freeformsoftware.db.file-interaction/user-db @!system))
+(def db-comp (:dev.freeformsoftware.db.user-db/user-db @!system))
 (def api-comp (:dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api @!system))
 (def sync-comp (:dev.freeformsoftware.ejabberd.sync-state/sync-state @!system))
 

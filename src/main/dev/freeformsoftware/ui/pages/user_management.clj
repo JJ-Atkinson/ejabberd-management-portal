@@ -1,7 +1,7 @@
 (ns dev.freeformsoftware.ui.pages.user-management
   (:require
    [dev.freeformsoftware.link-provider :as link-provider]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.ejabberd.sync-state :as sync-state]
    [dev.freeformsoftware.ui.html-fragments :as ui.frag]
    [hiccup2.core :as h]
@@ -285,8 +285,14 @@
    we should return the user-form-fragment with the errors listed."
   [{:keys [sync-state] :as conf} {:keys [params]}]
   (let [{:keys [create? member-def] :as params} (parse-user-form-params params)
-        {:keys [success? errors error-value]} (sync-state/swap-state! sync-state #(swap-user % params))
         {:keys [user-id]} member-def
+        reason (if create?
+                 (str "Creating new user: " user-id)
+                 (str "Updating user: " user-id))
+        {:keys [success? errors error-value]} (sync-state/swap-state!
+                                               sync-state
+                                               {:reason reason}
+                                               #(swap-user % params))
         form-id (if create? "user-form-fragment-create" "user-form-fragment-edit")]
 
     (cond
@@ -309,6 +315,7 @@
   [{:keys [sync-state]} {[user-id] :path-params}]
   (sync-state/swap-state!
    sync-state
+   {:reason (str "Deleting user: " user-id)}
    (fn [user-db]
      (update user-db
              :members

@@ -1,7 +1,7 @@
 (ns dev.freeformsoftware.run.prod
   (:require
    [dev.freeformsoftware.config :as config]
-   dev.freeformsoftware.db.file-interaction
+   dev.freeformsoftware.db.user-db
    dev.freeformsoftware.ejabberd.admin-bot
    dev.freeformsoftware.ejabberd.ejabberd-api
    dev.freeformsoftware.ejabberd.sync-state

@@ -6,7 +6,7 @@
   (:require
    [better-cond.core :as b]
    [camel-snake-kebab.core :as csk]
-   [dev.freeformsoftware.db.file-interaction :as file-db]
+   [dev.freeformsoftware.db.user-db :as file-db]
    [dev.freeformsoftware.ejabberd.room-membership :as room-membership]
    [dev.freeformsoftware.link-provider :as link-provider]
    [taoensso.telemere :as tel]))

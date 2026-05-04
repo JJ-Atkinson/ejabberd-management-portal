@@ -222,10 +222,19 @@
     (tel/log! :debug ["Writing user-db to" (str userdb-file)])
 
     ;; Remove any internal keys before validation and writing
-    (let [config-to-write   (dissoc config :_file-sha256)
+    (let [expected-sha      (:_file-sha256 config)
+          current-sha       (when (fs/exists? userdb-file)
+                              (compute-sha256 userdb-file))
+          config-to-write   (dissoc config :_file-sha256)
 
           ;; Validate before writing
           validation-result (schema/validate-user-db config-to-write)]
+
+      (when (and expected-sha current-sha (not= expected-sha current-sha))
+        (throw (ex-info "User database was modified since it was read"
+                        {:type         :concurrent-modification
+                         :expected-sha expected-sha
+                         :current-sha  current-sha})))
 
       (when-not (:valid? validation-result)
         (tel/log! :error ["User-db validation failed before write" validation-result])

@@ -3,8 +3,7 @@
    
    This bot maintains a persistent connection to the XMPP server and can:
    - Respond to user commands
-   - Participate in all managed rooms
-   - Appear in all managed users' rosters
+   - Participate in rooms that include the admin bot group
    
    The bot is automatically managed on every boot:
    - Checks if admin-bot user exists in ejabberd
@@ -47,7 +46,7 @@
 
 (def member-admin-bot
   "Virtual member definition for the admin bot.
-   This is ghost-included in sync-state to ensure the bot appears in all rooms and rosters."
+   This is ghost-included in sync-state with :group/bot so rooms can opt in to the bot."
   {:name    "Admin Bot"
    :user-id "admin"})
 
@@ -138,8 +137,14 @@
     (catch Exception e
       (tel/log! :warn ["OMEMO service initialization issue" {:error (ex-message e)}]))))
 
-;; Forward declaration for reconnection handler
-(declare join-all-rooms)
+;; Forward declarations for reconnection handler and room synchronization.
+(declare join-all-rooms leave-muc-room)
+
+(defn- bot-room?
+  "Returns true when a room explicitly attaches the admin bot group."
+  [room]
+  (or (contains? (:members room) :group/bot)
+      (contains? (:admins room) :group/bot)))
 
 (defn- setup-connection-listener
   "Sets up a listener to monitor XMPP connection state changes.
@@ -415,7 +420,9 @@
    Returns the MultiUserChat object on success, nil on failure.
    
    Side effects: Adds listener to :muc-room-listeners atom with key \"room-id@muc-service\""
-  [{:keys [connection muc-service xmpp-domain !muc-room-listeners] :as conf} room-id]
+  [{:keys [connection muc-service xmpp-domain]
+    !muc-room-listeners :muc-room-listeners
+    :as conf} room-id]
   (try
     (let [^AbstractXMPPConnection conn connection
           muc-manager                  (MultiUserChatManager/getInstanceFor conn)
@@ -443,36 +450,64 @@
                                                    body)))))]
         (.addMessageListener muc listener)
 
-        ;; Store listener in atom for tracking
+        ;; Store listener and MUC handle so later config changes can make the bot leave.
         (when !muc-room-listeners
-          (swap! !muc-room-listeners assoc room-jid-str listener)))
+          (swap! !muc-room-listeners assoc room-jid-str {:listener listener
+                                                         :muc      muc})))
 
       muc)
     (catch Exception e
       (tel/log! :warn ["Failed to join MUC room" {:room-id room-id :error (ex-message e)}])
       nil)))
 
-(defn- join-all-rooms
-  "Joins all rooms defined in user-db that don't already have listeners.
-   
-   Checks :muc-room-listeners atom to see which rooms are already joined,
-   and only joins rooms that don't have listeners yet."
-  [{:keys [user-db muc-service !muc-room-listeners] :as conf}]
-  (try
-    (let [db                 (file-db/read-user-db user-db)
-          rooms              (:rooms db)
+(defn sync-joined-rooms!
+  "Reconciles the bot's live MUC joins with rooms that explicitly attach :group/bot."
+  [{:keys [muc-service]
+    !muc-room-listeners :muc-room-listeners
+    :as conf} rooms]
+  (if-not (:connection conf)
+    []
+    (let [bot-room-ids       (->> rooms
+                                  (filter bot-room?)
+                                  (keep :room-id)
+                                  set)
           existing-listeners (if !muc-room-listeners @!muc-room-listeners {})
           joined-rooms       (atom [])]
+
+      (doseq [[room-jid-str entry] existing-listeners
+              :let [room-id (first (clojure.string/split room-jid-str #"@" 2))]
+              :when (not (contains? bot-room-ids room-id))]
+        (when-let [muc (:muc entry)]
+          (leave-muc-room room-id muc))
+        (when !muc-room-listeners
+          (swap! !muc-room-listeners dissoc room-jid-str)))
 
       (doseq [room  rooms
               :let  [room-id      (:room-id room)
                      room-jid-str (when room-id (str room-id "@" muc-service))]
-              :when (and room-id (not (contains? existing-listeners room-jid-str)))]
+              :when (and (bot-room? room)
+                         room-id
+                         (not (contains? (if !muc-room-listeners @!muc-room-listeners {})
+                                         room-jid-str)))]
         (when-let [muc (join-muc-room conf room-id)]
           (swap! joined-rooms conj {:room-id room-id :muc muc})))
 
-      (tel/log! :info ["Joined MUC rooms" {:count (count @joined-rooms) :skipped (count existing-listeners)}])
-      @joined-rooms)
+      (tel/log! :info ["Joined MUC rooms" {:count   (count @joined-rooms)
+                                            :tracked (count (if !muc-room-listeners
+                                                              @!muc-room-listeners
+                                                              {}))}])
+      @joined-rooms)))
+
+(defn- join-all-rooms
+  "Joins rooms that explicitly attach :group/bot and leaves rooms that no longer do.
+   
+   Checks :muc-room-listeners atom to see which rooms are already joined,
+   and only joins rooms that don't have listeners yet."
+  [{:keys [user-db] :as conf}]
+  (try
+    (let [db                 (file-db/read-user-db user-db)
+          rooms              (:rooms db)]
+      (sync-joined-rooms! conf rooms))
     (catch Exception e
       (tel/log! :warn ["Failed to join all rooms" {:error (ex-message e)}])
       [])))
@@ -487,7 +522,9 @@
    - room-id: The room identifier to join
    
    Returns the MultiUserChat object on success, nil if already joined or on failure."
-  [{:keys [muc-service !muc-room-listeners] :as admin-bot} room-id]
+  [{:keys [muc-service]
+    !muc-room-listeners :muc-room-listeners
+    :as admin-bot} room-id]
   (when (and admin-bot !muc-room-listeners)
     (let [room-jid-str       (str room-id "@" muc-service)
           existing-listeners @!muc-room-listeners]

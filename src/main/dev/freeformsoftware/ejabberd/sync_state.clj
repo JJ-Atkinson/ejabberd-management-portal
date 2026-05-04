@@ -250,7 +250,7 @@
   "Creates rooms that don't have :room-id assigned yet.
    
    Room names are converted to kebab-case for the actual room ID.
-   After creating each room, the admin bot is instructed to join it.
+   After creating each bot-enabled room, the admin bot is instructed to join it.
    Returns updated rooms vector with :room-id populated for all rooms."
   [ejabberd-api rooms managed-muc-options muc-service admin-bot]
   (let [report        (atom [])
@@ -279,8 +279,10 @@
                  :name    (:name room)
                  :room-id room-id})
 
-              ;; Join the newly created room with the admin bot
-              (when admin-bot
+              ;; Join only rooms that explicitly attach the admin bot group.
+              (when (and admin-bot
+                         (or (contains? (:members room) :group/bot)
+                             (contains? (:admins room) :group/bot)))
                 (admin-bot/join-room-if-new! admin-bot room-id)))
             (catch Exception e
               (tel/log! :error
@@ -707,6 +709,10 @@
                                (:admin-bot component)
                                room-affiliations-map))
 
+        ;; Keep the live bot connection aligned with the same :group/bot room rule.
+        _ (when (:admin-bot component)
+            (admin-bot/sync-joined-rooms! (:admin-bot component) (:rooms working-state)))
+
         ;; Phase 6.5: Fetch UPDATED room affiliations for bookmarks (after affiliation sync)
         room-affiliations-raw
         (into {}
@@ -911,4 +917,3 @@
 
   (def synced-db (sync-state! testing-conf* db))
   (user-db/write-user-db (:user-db testing-conf*) (:state synced-db)))
-

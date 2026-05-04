@@ -79,7 +79,8 @@
 
 (def valid-config
   {:groups  {:group/owner  "Owner"
-             :group/member "Member"}
+             :group/member "Member"
+             :group/bot    "Admin Bot"}
    :rooms   [{:name                   "Test Room"
               :members                #{:group/member}
               :admins                 #{:group/owner}
@@ -385,7 +386,8 @@
   (behavior "handles empty collections"
     (let [component      (init-test-component)
           current        (sut/read-user-db component)
-          minimal-config {:groups       {:group/owner "Owner"}
+          minimal-config {:groups       {:group/owner "Owner"
+                                         :group/bot   "Admin Bot"}
                           :rooms        []
                           :members      []
                           :_file-sha256 (:_file-sha256 current)}

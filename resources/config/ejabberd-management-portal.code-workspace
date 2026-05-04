@@ -1,0 +1,18 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../../personal/jarrett-personal-dev-tools"
+		}
+	],
+	"settings": {
+		"workbench.colorCustomizations": {
+			"tab.activeBackground": "#c0e7c2",
+			"activityBar.background": "#ffff00",
+			"titleBar.activeBackground": "#747434",
+			"statusBar.background": "#3b4400"
+		}
+	}
+}

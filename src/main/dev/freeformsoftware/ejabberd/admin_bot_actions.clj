@@ -32,6 +32,11 @@
       (contains? (:groups user) group)
       false)))
 
+(defn- portal-user
+  [user-db user-id]
+  (let [db (file-db/read-user-db user-db)]
+    (first (filter #(= (:user-id %) user-id) (:members db)))))
+
 (defn send-jitsi-invitations!
   "Sends Jitsi meeting invitation links to a list of members via XMPP DM.
    
@@ -116,7 +121,7 @@
   [{:keys [send-message! credentials admin-http-portal-url xmpp-domain user-db]} reply-to]
   (let [user-id (:local-part reply-to)]
     (if (user-has-group? user-db user-id :group/owner)
-      (let [message (str "Ejabberd Admin Credentials:\n"
+       (let [message (str "Ejabberd Admin Credentials:\n"
                          "Username: "
                          (:username credentials)
                          "@"
@@ -131,6 +136,22 @@
                          admin-http-portal-url)]
         (send-message! reply-to message))
       (send-message! reply-to "Unauthorized: This command is only available to owners."))))
+
+(defn- action-login-scoria
+  "Creates a Scoria login URL for any known portal member. Scoria owns authz."
+  [{:keys [send-message! link-provider user-db]} reply-to]
+  (let [user-id (:local-part reply-to)]
+    (if-let [user (portal-user user-db user-id)]
+      (try
+        (send-message! reply-to
+                       (str "Scoria: "
+                            (link-provider/create-scoria-login-url link-provider user)))
+        (catch Exception e
+          (tel/log! :error ["Failed to create Scoria login URL"
+                            {:user user-id :error (ex-message e)}])
+          (send-message! reply-to
+                         "Scoria login is not configured yet. Please contact an owner.")))
+      (send-message! reply-to "Unauthorized: This command is only available to known members."))))
 
 (defn- action-create-meet
   "Creates Jitsi meeting links and sends them to all room members via DM.
@@ -192,8 +213,8 @@
      (case service
        :dm
        (if is-owner?
-         "Available commands (all start with 'bot'):\n- bot status: Check if bot is alive\n- bot create meet: Get link to create/distribute meeting links\n- bot login user admin: Get link to user/room management\n- bot login ej admin: Show ejabberd admin credentials and URL"
-         "Available commands (all start with 'bot'):\n- bot status: Check if bot is alive\n- bot create meet: Get link to create/distribute meeting links")
+          "Available commands (all start with 'bot'):\n- bot status: Check if bot is alive\n- bot create meet: Get link to create/distribute meeting links\n- bot login scoria: Get a Scoria login link\n- bot login user admin: Get link to user/room management\n- bot login ej admin: Show ejabberd admin credentials and URL"
+          "Available commands (all start with 'bot'):\n- bot status: Check if bot is alive\n- bot create meet: Get link to create/distribute meeting links\n- bot login scoria: Get a Scoria login link")
        :muc
        "Available commands (all start with 'bot'):\n- bot create meet [room-name]: Create Jitsi meeting for this room")]
     (send-message! reply-to help-text)))
@@ -225,6 +246,10 @@
     :let [[_ login-user] (re-matches #"(?i)login\s+user\s+admin.*" cmd)]
     (some? login-user)
     (action-login-user-admin conf reply-to)
+
+    :let [[_ login-scoria] (re-matches #"(?i)login\s+scoria.*" cmd)]
+    (some? login-scoria)
+    (action-login-scoria conf reply-to)
 
     :let [[_ login-ej] (re-matches #"(?i)login\s+ej\s+admin.*" cmd)]
     (some? login-ej)

@@ -1,7 +1,13 @@
 (ns dev.freeformsoftware.auth.jwt
   (:require
    [buddy.sign.jwt :as jwt]
-   [clojure.string :as str]))
+   [cheshire.core :as json]
+   [clojure.string :as str])
+  (:import
+    [java.nio.charset StandardCharsets]
+    [java.security KeyFactory Signature]
+    [java.security.spec PKCS8EncodedKeySpec]
+    [java.util Base64]))
 
 ;; =============================================================================
 ;; Configuration
@@ -106,3 +112,67 @@
     (str base-url
          "/"     (java.net.URLEncoder/encode room-name "UTF-8")
          "?jwt=" (java.net.URLEncoder/encode jwt-token "UTF-8"))))
+
+;; =============================================================================
+;; Scoria-Specific JWT Functions
+;; =============================================================================
+
+(defn- now-seconds
+  []
+  (quot (System/currentTimeMillis) 1000))
+
+(defn- utf8-bytes
+  [^String s]
+  (.getBytes s StandardCharsets/UTF_8))
+
+(defn- base64-url-encode
+  [bytes]
+  (.encodeToString (.withoutPadding (Base64/getUrlEncoder)) bytes))
+
+(defn- pem-body
+  [pem]
+  (-> (str pem)
+      (str/replace #"-----BEGIN [^-]+-----" "")
+      (str/replace #"-----END [^-]+-----" "")
+      (str/replace #"\s" "")))
+
+(defn- rsa-private-key
+  [private-key-pem]
+  (when (str/blank? private-key-pem)
+    (throw (ex-info "Scoria private key PEM is required" {:type :missing-config})))
+  (let [key-bytes (.decode (Base64/getDecoder) (pem-body private-key-pem))
+        spec      (PKCS8EncodedKeySpec. key-bytes)]
+    (.generatePrivate (KeyFactory/getInstance "RSA") spec)))
+
+(defn- rs256-sign
+  [private-key-pem signing-input]
+  (let [signature (Signature/getInstance "SHA256withRSA")]
+    (.initSign signature (rsa-private-key private-key-pem))
+    (.update signature (utf8-bytes signing-input))
+    (base64-url-encode (.sign signature))))
+
+(defn create-scoria-jwt
+  "Create a Scoria RS256 JWT for a portal user.
+
+   scoria-config must include :private-key-pem, :issuer, and :audience. Concrete
+   production values are supplied by deployment config, not this source tree."
+  [{:keys [private-key-pem issuer audience kid]} user & {:keys [duration-days]
+                                                         :or   {duration-days 15}}]
+  (when (str/blank? issuer)
+    (throw (ex-info "Scoria JWT issuer is required" {:type :missing-config})))
+  (when (str/blank? audience)
+    (throw (ex-info "Scoria JWT audience is required" {:type :missing-config})))
+  (let [now       (now-seconds)
+        exp       (+ now (* duration-days 24 60 60))
+        header    (cond-> {:typ "JWT" :alg "RS256"}
+                    (not (str/blank? kid)) (assoc :kid kid))
+        payload   (cond-> {:iss issuer
+                           :aud audience
+                           :sub (:user-id user)
+                           :iat now
+                           :exp exp}
+                    (:name user) (assoc :name (:name user)))
+        encoded-h (base64-url-encode (utf8-bytes (json/generate-string header)))
+        encoded-p (base64-url-encode (utf8-bytes (json/generate-string payload)))
+        input     (str encoded-h "." encoded-p)]
+    (str input "." (rs256-sign private-key-pem input))))

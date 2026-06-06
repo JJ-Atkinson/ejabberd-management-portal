@@ -11,6 +11,8 @@
                 :issuer   "dev.freeformsoftware"
                 :audience "jitsi"
                 :subject  "meet.jitsi"}
+ :scoria-config nil
+ :scoria-directory-token nil
  :muc-service "conference.yourserverhere.org"
 
  ;; only used in the dev environment - otherwise a random password is generated every time
@@ -40,10 +42,11 @@
   :dev.freeformsoftware.db.user-db/user-db
   {:db-folder #n/ref :db-folder}
 
-  :dev.freeformsoftware.link-provider/link-provider
-  {:jwt-secret                 #n/ref :jwt-secret
-   :management-portal-url-base #n/ref :management-portal-url-base
-   :jitsi-config               #n/ref :jitsi-config}
+   :dev.freeformsoftware.link-provider/link-provider
+   {:jwt-secret                 #n/ref :jwt-secret
+    :management-portal-url-base #n/ref :management-portal-url-base
+    :jitsi-config               #n/ref :jitsi-config
+    :scoria-config              #n/ref :scoria-config}
 
   :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
   {:user-db       #ig/ref :dev.freeformsoftware.db.user-db/user-db
@@ -81,13 +84,15 @@
    :user-db                    #ig/ref :dev.freeformsoftware.db.user-db/user-db
    :sync-state                 #ig/ref :dev.freeformsoftware.ejabberd.sync-state/sync-state
    :ejabberd-api               #ig/ref :dev.freeformsoftware.ejabberd.ejabberd-api/ejabberd-api
-   :link-provider              #ig/ref :dev.freeformsoftware.link-provider/link-provider
-   :admin-bot                  #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot}
+    :link-provider              #ig/ref :dev.freeformsoftware.link-provider/link-provider
+    :admin-bot                  #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot}
 
-  :dev.freeformsoftware.server.internal-server/server
-  {:jetty     {:port 3004}
-   :env       #n/ref :env
-   :admin-bot #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot}
+   :dev.freeformsoftware.server.internal-server/server
+   {:jetty                  {:port 3004}
+    :env                    #n/ref :env
+    :admin-bot              #ig/ref :dev.freeformsoftware.ejabberd.admin-bot/admin-bot
+    :user-db                #ig/ref :dev.freeformsoftware.db.user-db/user-db
+    :scoria-directory-token #n/ref :scoria-directory-token}
 
   #_#_:dev.freeformsoftware.run.debugging-nrepl-server/debugging-nrepl-server
     {:port 3005}}}

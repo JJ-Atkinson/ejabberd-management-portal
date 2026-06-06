@@ -7,9 +7,12 @@
    - User password reset URLs
    - Admin link generation page"
   (:require
-   [dev.freeformsoftware.auth.jwt :as jwt]
-   [integrant.core :as ig]
-   [taoensso.telemere :as tel]))
+    [clojure.string :as str]
+    [dev.freeformsoftware.auth.jwt :as jwt]
+    [integrant.core :as ig]
+    [taoensso.telemere :as tel])
+  (:import
+    [java.net URLEncoder]))
 
 (set! *warn-on-reflection* true)
 
@@ -120,15 +123,41 @@
                      :audience base-url}
                     {:role "meet-invite"}
                     :duration-hours
-                    duration-hours)]
+                     duration-hours)]
     (str base-url "/send-meet-invite?jwt=" invite-jwt)))
+
+(defn create-scoria-login-url
+  "Creates a Scoria login URL with a 15-day RS256 JWT by default.
+
+   The returned URL intentionally carries the JWT as a query parameter. Scoria
+   validates that token, promotes it to an HttpOnly cookie, and redirects to a
+   clean URL."
+  [component user & {:keys [duration-days redirect]
+                     :or   {redirect "/"}}]
+  (let [{:keys [base-url duration-days default-redirect]
+         :as   scoria-config} (:scoria-config component)
+        duration-days (or duration-days (:duration-days scoria-config) 15)
+        redirect      (or redirect default-redirect "/")]
+    (when-not scoria-config
+      (throw (ex-info "scoria-config is required for Scoria login links"
+                      {:type :missing-config})))
+    (when (str/blank? base-url)
+      (throw (ex-info "scoria-config :base-url is required"
+                      {:type :missing-config})))
+    (let [jwt-token (jwt/create-scoria-jwt scoria-config
+                                           user
+                                           :duration-days
+                                           duration-days)]
+      (str base-url
+           "/?jwt=" (URLEncoder/encode ^String jwt-token "UTF-8")
+           "&redirect=" (URLEncoder/encode ^String redirect "UTF-8")))))
 
 ;; =============================================================================
 ;; Integrant Lifecycle
 ;; =============================================================================
 
 (defmethod ig/init-key ::link-provider
-  [_ {:keys [jwt-secret management-portal-url-base jitsi-config] :as config}]
+  [_ {:keys [jwt-secret management-portal-url-base jitsi-config scoria-config] :as config}]
   (tel/log! :info
             ["Initializing link-provider component"
              {:management-portal-url-base management-portal-url-base}])
@@ -152,7 +181,8 @@
   ;; Return plain map with configuration
   (let [conf {:jwt-secret                 jwt-secret
               :management-portal-url-base management-portal-url-base
-              :jitsi-config               jitsi-config}]
+              :jitsi-config               jitsi-config
+              :scoria-config              scoria-config}]
     (def testing-conf* conf)
     conf))
 
